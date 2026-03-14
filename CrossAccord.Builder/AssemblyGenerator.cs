@@ -1,4 +1,3 @@
-using System.Reflection;
 using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -12,13 +11,16 @@ public static class AssemblyGenerator
     public static PatcherInfo[] GetAllPatchers(string[] assemblies)
     {
         List<PatcherInfo> output = new();
-        var extraPaths = assemblies.Select(it => Directory.GetParent(it).FullName);
+        var extraPaths = assemblies.Select(it => Path.GetDirectoryName(it)).ToHashSet();
 
         foreach (var assemblyPath in assemblies)
         {
-            var assemblyParentPath = Directory.GetParent(assemblyPath).FullName;
+            var parentDirectory = Path.GetDirectoryName(assemblyPath);
+
+            if (parentDirectory is null)
+                throw new DirectoryNotFoundException($"Could not find directory from path: {assemblyPath}");
             
-            AssemblyHelper.InitializeResolver(assemblyParentPath, extraPaths.ToArray());
+            AssemblyHelper.InitializeResolver(parentDirectory, extraPaths.ToArray());
 
             using var assembly = AssemblyHelper.ReadAssemblyInMemory(assemblyPath, false);
 
