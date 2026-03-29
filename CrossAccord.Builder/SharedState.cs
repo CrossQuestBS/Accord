@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace CrossAccord.Builder;
 
 public static class SharedState

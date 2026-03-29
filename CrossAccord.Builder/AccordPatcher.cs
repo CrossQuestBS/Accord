@@ -1,11 +1,12 @@
-﻿using IPA.BuildProcess.Interfaces;
+﻿using System.Reflection;
+using IPA.BuildProcess.Interfaces;
 
 namespace CrossAccord.Builder;
 
-public class UnityPatcher : IPostLinkerBuild
+public class AccordPatcher : IPostLinkerBuild
 {
-    public int executeOrder => 1;
-    public void Execute(List<string> files)
+    public int executeOrder => 2;
+    public void Execute(List<string> files, Dictionary<string, Assembly> _)
     {
         var assemblies = files.Where(it => it.EndsWith(".dll")).ToArray();
 
