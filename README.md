@@ -5,7 +5,7 @@ C# "Ahead-of-time" patcher with runtime handling of patches.
 
 - [ ] [Support Async](https://github.com/CrossQuestBS/CrossAccord/issues/1)
 - [ ] [Support Enumerator](https://github.com/CrossQuestBS/CrossAccord/issues/2)
-- [ ] [Support Transpiler like patches](https://github.com/CrossQuestBS/CrossAccord/issues/3)
+- [x] [Support Transpiler like patches](https://github.com/CrossQuestBS/CrossAccord/issues/3)
 
 ## Example
 
