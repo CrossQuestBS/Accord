@@ -10,6 +10,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossAccord.Builder", "Cros
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossAccord.ILTrampoline", "CrossAccord.ILTrampoline\CrossAccord.ILTrampoline.csproj", "{FB122466-AF04-4BC7-93D6-F09E8763B325}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossAccord.Tests", "CrossAccord.Tests\CrossAccord.Tests.csproj", "{1698EB26-7A4B-4380-BAE8-B646CD2CA700}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrossAccord.TestCases", "CrossAccord.TestCases\CrossAccord.TestCases.csproj", "{36125482-92AA-4BF2-920E-F721A80EA7E4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +40,13 @@ Global
 		{FB122466-AF04-4BC7-93D6-F09E8763B325}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FB122466-AF04-4BC7-93D6-F09E8763B325}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FB122466-AF04-4BC7-93D6-F09E8763B325}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1698EB26-7A4B-4380-BAE8-B646CD2CA700}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1698EB26-7A4B-4380-BAE8-B646CD2CA700}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1698EB26-7A4B-4380-BAE8-B646CD2CA700}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1698EB26-7A4B-4380-BAE8-B646CD2CA700}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36125482-92AA-4BF2-920E-F721A80EA7E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36125482-92AA-4BF2-920E-F721A80EA7E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36125482-92AA-4BF2-920E-F721A80EA7E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36125482-92AA-4BF2-920E-F721A80EA7E4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -19,7 +19,7 @@ public class RuntimeManager
         var generatedAssembly = Assembly.Load("CrossAccord.Generated, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null");
         
         var types = generatedAssembly.GetTypes()
-            .Where(p => interfacePatcher.IsAssignableFrom(p));
+            .Where(interfacePatcher.IsAssignableFrom);
 
         foreach (var patcherType in types)
         {

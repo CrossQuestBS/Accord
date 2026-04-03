@@ -1,0 +1,187 @@
+using AsmResolver;
+using AsmResolver.DotNet;
+using AsmResolver.DotNet.Signatures;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
+namespace CrossAccord.Builder;
+
+public class AssemblyGenerator_V2
+{
+    public static PatcherInfo[] GetPatches(RuntimeContext context)
+    {
+        List<PatcherInfo> output = new();
+
+        foreach (var assembly in context.GetLoadedAssemblies())
+        {
+            if (assembly.ManifestModule is null)
+                continue;
+            
+            var patches = GetPatchesFromModule(context, assembly.ManifestModule);
+            
+            output.AddRange(patches);
+        }
+        
+        return output.GroupBy(it => $"{it.AssemblyName}_{it.MethodFullName}").Select(x => x.First()).ToArray();;
+    }
+
+    private static PatcherInfo[] GetPatchesFromModule(RuntimeContext context, AsmResolver.DotNet.ModuleDefinition moduleDefinition)
+    {
+        List<PatcherInfo> output = new();
+        
+        var patchAttributes = moduleDefinition.GetAllTypes().Select(GetPatchAttribute).Where(it => it != null);
+
+        foreach (var patchAttribute in patchAttributes)
+        {
+            var arguments = patchAttribute!.Signature!.FixedArguments;
+
+            var classType = (TypeDefOrRefSignature)arguments[0].Element!;
+            var methodName = (Utf8String)arguments[1].Element;
+
+            if (!classType.TryResolve(context, out TypeDefinition definition))
+                continue;
+
+            var methodDefinition = definition.Methods.FirstOrDefault(it =>
+                it.Name == methodName && it.DeclaringType.FullName == classType.FullName);
+            
+
+            var guid = Guid.NewGuid();
+            var code = GetSyntaxTree(methodDefinition, guid);
+
+            var patchInfo = new PatcherInfo(methodDefinition.DeclaringModule.Name, methodDefinition.FullName, code, guid);
+            
+            output.Add(patchInfo);
+        }
+
+        return output.ToArray();
+    }
+    
+    private static CustomAttribute? GetPatchAttribute(TypeDefinition typeDefinition)
+    {
+        if (!typeDefinition.HasCustomAttributes)
+            return null;
+
+
+        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordPatchAttribute");
+    }
+    
+    private static SyntaxTree GetSyntaxTree(MethodDefinition methodDefinition, Guid guid)
+    { 
+        var fullClassName = methodDefinition.DeclaringType.FullName;
+        var methodName = methodDefinition.Name.ToString();
+        var generatedClassName = $"{methodName}Patcher_{guid.ToClassSafeString()}".Replace(".ctor", "Constructor");
+
+        var parameters = "";
+
+        List<string> totalParameters = new();
+        List<string> simpleParameters = new();
+
+        var parameterSimpleValue = "";
+
+        if (!methodDefinition.IsStatic)
+        {
+            totalParameters.Add($"global::{fullClassName} instance");
+            simpleParameters.Add("instance");
+        }
+        
+        if (methodDefinition.Parameters.Count > 0)
+        {
+            
+            simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "" : "ref")} arg{idx + 1}").ToArray());
+            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "in" : "ref")} global::{it.ParameterType.FullName.Replace("&", "").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "")} arg{idx+1}").ToArray());
+        }
+
+        if (methodDefinition.Signature.ReturnType.Name != "Void")
+        {
+            totalParameters.Add($"ref global::{methodDefinition.Signature.ReturnType.FullName} returnValue");
+            simpleParameters.Add("ref returnValue");
+        }
+
+        parameters = string.Join(", ", totalParameters);
+        parameterSimpleValue = string.Join(", ", simpleParameters);
+
+        return CSharpSyntaxTree.ParseText($@"using System;
+using System.Collections.Generic;
+using System.Reflection;
+using CrossAccord.Common.Interfaces;
+using CrossAccord.Common;
+
+namespace CrossAccord.Generated.{fullClassName}.{methodName.Replace(".", "Dot")};
+
+
+public class {generatedClassName} : IAccordPatcher
+{{
+    public static MemberInfo OriginalMemberInfo {{ get; }} =
+        typeof(global::{fullClassName}).GetMember(""{methodName}"", (global::System.Reflection.BindingFlags)~0)[0]!;
+
+    private delegate bool PrefixDelegate({parameters});
+
+    private delegate void PostfixDelegate({parameters});
+
+    private static readonly Dictionary<IAccordPatch, PostfixDelegate> PostfixDict = new();
+    private static readonly Dictionary<IAccordPatch, PrefixDelegate> PrefixDict = new();
+
+    public static {generatedClassName} Instance {{ get; }} = new();
+
+    private {generatedClassName}()
+    {{
+    }}
+
+    public void Patch(IAccordPatch instance)
+    {{
+        var prefixMethodInfo = instance.GetPatchMethodInfo(""Prefix"");
+
+        if (prefixMethodInfo is not null && prefixMethodInfo.ValidatePatch(OriginalMemberInfo))
+        {{
+            PrefixDict.Add(instance, (PrefixDelegate)Delegate.CreateDelegate(typeof(PrefixDelegate), instance, prefixMethodInfo));
+        }}
+
+        var postfixMethodInfo = instance.GetPatchMethodInfo(""Postfix"");
+
+        if (postfixMethodInfo is not null && postfixMethodInfo.ValidatePatch(OriginalMemberInfo))
+        {{
+            PostfixDict.Add(instance, (PostfixDelegate)Delegate.CreateDelegate(typeof(PostfixDelegate), instance, postfixMethodInfo));
+        }}
+    }}
+
+    public void Unpatch(IAccordPatch instance)
+    {{
+        PrefixDict.Remove(instance);
+        PostfixDict.Remove(instance);
+    }}
+
+    public bool Prefix({parameters})
+    {{
+        foreach (var keyValue in PrefixDict)
+        {{
+            try
+            {{
+                if (!keyValue.Value({parameterSimpleValue}))
+                    return false;
+            }}
+            catch (Exception e)
+            {{
+                Unpatch(keyValue.Key);
+            }}
+        }}
+
+        return true;
+    }}
+
+    public void Postfix({parameters})
+    {{
+        foreach (var keyValue in PostfixDict)
+        {{
+            try
+            {{
+                keyValue.Value({parameterSimpleValue});
+            }}
+            catch (Exception e)
+            {{
+                Unpatch(keyValue.Key);
+            }}
+        }}
+    }}
+}}");
+    }
+}
