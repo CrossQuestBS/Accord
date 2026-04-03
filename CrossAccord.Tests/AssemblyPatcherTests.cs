@@ -40,7 +40,7 @@ public class AssemblyPatcherTests
         private ModuleDefinition _patcherDefinition;
         
         [SetUp]
-        public void Setup()
+        public void SetupGeneratedPatcher()
         {
             var memoryStream = new MemoryStream();
             AssemblyGenerator.GeneratePatcherAssembly(_patcherInfo, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
