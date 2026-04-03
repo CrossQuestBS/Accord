@@ -10,7 +10,7 @@ namespace CrossAccord.TestCases
         public MemberInfo MemberMethod => typeof(ExampleClass).GetMethod(nameof(ExampleClass.Example))!;
         public void Postfix(ExampleClass instance)
         {
-            throw new NotImplementedException();
+            Console.WriteLine("Hi mom!");
         }
     }
 }

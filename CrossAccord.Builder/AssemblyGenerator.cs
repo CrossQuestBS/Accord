@@ -1,59 +1,56 @@
+using AsmResolver;
+using AsmResolver.DotNet;
+using AsmResolver.DotNet.Signatures;
 using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
-using Mono.Cecil;
 
 namespace CrossAccord.Builder;
 
-public static class AssemblyGenerator
+public class AssemblyGenerator
 {
-    public static PatcherInfo[] GetAllPatchers(string[] assemblies)
+    public static PatcherInfo[] GetPatches(RuntimeContext context)
     {
         List<PatcherInfo> output = new();
-        var extraPaths = assemblies.Select(it => Path.GetDirectoryName(it)).ToHashSet();
 
-        foreach (var assemblyPath in assemblies)
+        foreach (var assembly in context.GetLoadedAssemblies())
         {
-            var parentDirectory = Path.GetDirectoryName(assemblyPath);
-
-            if (parentDirectory is null)
-                throw new DirectoryNotFoundException($"Could not find directory from path: {assemblyPath}");
+            if (assembly.ManifestModule is null)
+                continue;
             
-            AssemblyHelper.InitializeResolver(parentDirectory, extraPaths.ToArray());
-
-            using var assembly = AssemblyHelper.ReadAssemblyInMemory(assemblyPath, false);
-
-            var patches = GetPatchesFromAssembly(assembly);
+            var patches = GetPatchesFromModule(context, assembly.ManifestModule);
             
             output.AddRange(patches);
         }
         
         return output.GroupBy(it => $"{it.AssemblyName}_{it.MethodFullName}").Select(x => x.First()).ToArray();;
     }
-    
-    public static PatcherInfo[] GetPatchesFromAssembly(AssemblyDefinition assemblyDefinition)
+
+    private static PatcherInfo[] GetPatchesFromModule(RuntimeContext context, AsmResolver.DotNet.ModuleDefinition moduleDefinition)
     {
         List<PatcherInfo> output = new();
         
-        var crossPatchTypes = assemblyDefinition.MainModule.Types.Where(it =>
-            it.HasCustomAttributes && 
-            it.CustomAttributes.Any(it => it.AttributeType.Name.Contains("AccordPatchAttribute"))).ToArray();
+        var patchAttributes = moduleDefinition.GetAllTypes().Select(GetPatchAttribute).Where(it => it != null);
 
-        foreach (var patchType in crossPatchTypes)
+        foreach (var patchAttribute in patchAttributes)
         {
-            var attribute = patchType.CustomAttributes.First(it => it.AttributeType.Name == "AccordPatchAttribute");
-            var patchClassType = (TypeReference)attribute.ConstructorArguments[0].Value;
-            var patchMethod = (string)attribute.ConstructorArguments[1].Value;
-            var properType = patchClassType.Resolve();
+            var arguments = patchAttribute!.Signature!.FixedArguments;
 
-            var methodDefinition = properType.Methods.First(it =>
-                it.Name == patchMethod && it.DeclaringType.FullName == patchClassType.FullName);
+            var classType = (TypeDefOrRefSignature)arguments[0].Element!;
+            var methodName = (Utf8String)arguments[1].Element;
+
+            if (!classType.TryResolve(context, out TypeDefinition definition))
+                continue;
+
+            var methodDefinition = definition.Methods.FirstOrDefault(it =>
+                it.Name == methodName && it.DeclaringType.FullName == classType.FullName);
             
-            var guid = Guid.NewGuid();
-            var code = GetCode(methodDefinition, guid);
 
-            var patchInfo = new PatcherInfo(methodDefinition.Module.Name, methodDefinition.FullName, code, guid);
+            var guid = Guid.NewGuid();
+            var code = GetSyntaxTree(methodDefinition, guid);
+
+            var patchInfo = new PatcherInfo(methodDefinition.DeclaringModule.Name, methodDefinition.FullName, classType.FullName, code, guid);
             
             output.Add(patchInfo);
         }
@@ -61,60 +58,19 @@ public static class AssemblyGenerator
         return output.ToArray();
     }
     
-
-    public static void GeneratePatcherAssembly(PatcherInfo[] allPatchers, string[] assemblies, string libraryPath)
+    private static CustomAttribute? GetPatchAttribute(TypeDefinition typeDefinition)
     {
-        var patchers = allPatchers;
-        
-        List<MetadataReference> metadataReferences = new();
-        
-        metadataReferences.AddRange(NetStandard21.References.All);
+        if (!typeDefinition.HasCustomAttributes)
+            return null;
 
-        foreach (var assemblyPath in assemblies)
-        {
-            metadataReferences.Add(MetadataReference.CreateFromFile(assemblyPath));
-        }
-        
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            "CrossAccord.Generated",
-            syntaxTrees: patchers.Select(it => it.GeneratedCode),
-            references: metadataReferences.ToArray(),
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-        using var ms = new MemoryStream();
-        // first compile
-        EmitResult result = compilation.Emit(ms);
-
-        // if failed, get error message
-        if (!result.Success)
-        {
-            IEnumerable<Diagnostic> failures = result.Diagnostics.Where(diagnostic =>
-                diagnostic.IsWarningAsError ||
-                diagnostic.Severity == DiagnosticSeverity.Error);
-            
-            foreach (Diagnostic diagnostic in failures)
-            {
-                throw new Exception(string.Format("Failed to compile code '{0}'! {1}: {2}", "Uhm?", diagnostic.Id,
-                    diagnostic.GetMessage()));
-            }
-
-            throw new Exception("Unknown error while compiling code '" + "Uhm?" + "'!");
-        }
-        // on success, load into assembly
-
-        // load assembly and add to cache
-        ms.Seek(0, SeekOrigin.Begin);
-
-        var fileStream = File.Create(Path.Join(libraryPath , "CrossAccord.Generated.dll"));
-
-        ms.CopyTo(fileStream);
-        fileStream.Close();
+        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordPatchAttribute");
     }
     
-    public static SyntaxTree GetCode(MethodDefinition methodDefinition, Guid guid)
-    {
+    private static SyntaxTree GetSyntaxTree(MethodDefinition methodDefinition, Guid guid)
+    { 
         var fullClassName = methodDefinition.DeclaringType.FullName;
-        var methodName = methodDefinition.Name;
+        var methodName = methodDefinition.Name.ToString();
         var generatedClassName = $"{methodName}Patcher_{guid.ToClassSafeString()}".Replace(".ctor", "Constructor");
 
         var parameters = "";
@@ -133,13 +89,13 @@ public static class AssemblyGenerator
         if (methodDefinition.Parameters.Count > 0)
         {
             
-            simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"{(it.IsIn ? "" : "ref")} arg{idx + 1}").ToArray());
-            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"{(it.IsIn ? "in" : "ref")} global::{it.ParameterType.FullName.Replace("&", "").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "")} arg{idx+1}").ToArray());
+            simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "" : "ref")} arg{idx + 1}").ToArray());
+            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "in" : "ref")} global::{it.ParameterType.FullName.Replace("&", "").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "")} arg{idx+1}").ToArray());
         }
 
-        if (methodDefinition.ReturnType.Name != "Void")
+        if (methodDefinition.Signature.ReturnType.Name != "Void")
         {
-            totalParameters.Add($"ref global::{methodDefinition.ReturnType.FullName} returnValue");
+            totalParameters.Add($"ref global::{methodDefinition.Signature.ReturnType.FullName} returnValue");
             simpleParameters.Add("ref returnValue");
         }
 
@@ -229,5 +185,49 @@ public class {generatedClassName} : IAccordPatcher
         }}
     }}
 }}");
+    }
+
+    public static void GeneratePatcherAssembly(PatcherInfo[] allPatchers, string[] assemblies, Stream outputStream)
+    {
+        var patchers = allPatchers;
+        
+        List<MetadataReference> metadataReferences = new();
+        
+        metadataReferences.AddRange(NetStandard21.References.All);
+
+        foreach (var assemblyPath in assemblies)
+        {
+            metadataReferences.Add(MetadataReference.CreateFromFile(assemblyPath));
+        }
+        
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            "CrossAccord.Generated",
+            syntaxTrees: patchers.Select(it => it.GeneratedCode),
+            references: metadataReferences.ToArray(),
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        using var ms = new MemoryStream();
+
+        EmitResult result = compilation.Emit(ms);
+
+        if (!result.Success)
+        {
+            IEnumerable<Diagnostic> failures = result.Diagnostics.Where(diagnostic =>
+                diagnostic.IsWarningAsError ||
+                diagnostic.Severity == DiagnosticSeverity.Error);
+            
+            foreach (Diagnostic diagnostic in failures)
+            {
+                throw new Exception(string.Format("Failed to compile code '{0}'! {1}: {2}", "Uhm?", diagnostic.Id,
+                    diagnostic.GetMessage()));
+            }
+
+            throw new Exception("Unknown error while compiling code");
+        }
+        
+        ms.Seek(0, SeekOrigin.Begin);
+
+
+        ms.CopyTo(outputStream);
     }
 }

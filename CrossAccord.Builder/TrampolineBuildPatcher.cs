@@ -4,12 +4,12 @@ using IPA.BuildProcess.Interfaces;
 
 namespace CrossAccord.Builder;
 
-public class TrampolineBuildPatcher : IPostLinkerBuild
+public class TrampolineBuildPatcher : IPostStagingBuild
 {
     public int executeOrder => 1;
     public void Execute(List<string> files, Dictionary<string, Assembly> assemblyDic)
     {
-        var assemblies = files.Where(it => it.EndsWith(".dll")).ToArray();
+        /*var assemblies = files.Where(it => it.EndsWith(".dll")).ToArray();
 
         var assemblyPath = assemblies.First();
 
@@ -36,6 +36,6 @@ public class TrampolineBuildPatcher : IPostLinkerBuild
             }
             
             TrampolinePatcher.PatchAssembly(key, value, files.ToArray(), assemblyDic);
-        }
+        }*/
     }
 }

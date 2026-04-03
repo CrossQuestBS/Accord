@@ -1,32 +1,60 @@
+using AsmResolver.DotNet;
 using IPA.BuildProcess.Interfaces;
 
 namespace CrossAccord.Builder;
 
-public class UnityGenerator : IPreLinkerBuild
+public class UnityGenerator : IPreStagingBuild
 {
     public int executeOrder => 1;
 
-    public void Execute(List<string> files)
+    public void Execute(Dictionary<string,List<string>> files)
     {
-        var crossAccordPath = files.First(it => it.EndsWith("CrossAccord.dll"));
+        
+        if (!files.TryGetValue("Libs", out var libDirectoryFiles))
+            throw new DirectoryNotFoundException($"Did not find library directory");
 
-        var libDirectory = Path.GetDirectoryName(crossAccordPath);
+        if (!files.TryGetValue("Mods", out var modsFiles))
+            throw new DirectoryNotFoundException($"Did not find mods directory");
+        
+        if (!files.TryGetValue("BeatSaberData", out var beatSaberFiles))
+            throw new DirectoryNotFoundException($"Did not find beatsaber data directory");
+        
+        if (!files.TryGetValue("UnityDependencies", out var unityFiles))
+            throw new DirectoryNotFoundException($"Did not find unity dependencies directory");
 
-        if (libDirectory is null)
-            throw new DirectoryNotFoundException($"Did not find library directory from path {crossAccordPath}");
+        List<string> patchAssemblies = new List<string>();
+        
+        patchAssemblies.AddRange(libDirectoryFiles);
+        patchAssemblies.AddRange(modsFiles);
+        
+        var extraPaths = files.Values.SelectMany(it => it.Select(path => Path.GetDirectoryName(path))).ToHashSet();
+        
+        var context = new RuntimeContext(
+            targetRuntime: DotNetRuntimeInfo.NetStandard(2, 1),
+            searchDirectories: extraPaths
+        );
 
-        var gameDirectory = Path.GetDirectoryName(libDirectory);
-
-        if (gameDirectory is null)
-            throw new DirectoryNotFoundException($"Did not find game directory from path {crossAccordPath}");
-
-        var allGameAssemblies = Directory.GetFiles(gameDirectory, "*.dll", SearchOption.AllDirectories)
-            .Where(fileName => fileName.EndsWith(".dll")).ToList();
-
-        var patchers = AssemblyGenerator.GetAllPatchers(allGameAssemblies.ToArray());
-
+        foreach (var file in patchAssemblies)
+        {
+            context.AddAssembly(AssemblyDefinition.FromFile(file, createRuntimeContext: false));
+        }
+        
+        List<string> assembliesToReference = new List<string>();
+        
+        assembliesToReference.AddRange(libDirectoryFiles);
+        assembliesToReference.AddRange(modsFiles);
+        assembliesToReference.AddRange(beatSaberFiles);
+        assembliesToReference.AddRange(unityFiles);
+        
+        var patchers = AssemblyGenerator.GetPatches(context);
+        
         SharedState.PatcherInfos = patchers;
 
-        AssemblyGenerator.GeneratePatcherAssembly(patchers, allGameAssemblies.ToArray(), libDirectory);
+        var outputAssemblyPath = Path.Join(Path.GetDirectoryName(libDirectoryFiles[0]), "CrossAccord.Generated.dll");
+
+        var fileStream = File.Create(outputAssemblyPath);
+
+        AssemblyGenerator.GeneratePatcherAssembly(patchers, assembliesToReference.ToArray(), fileStream);
+        fileStream.Close();
     }
 }

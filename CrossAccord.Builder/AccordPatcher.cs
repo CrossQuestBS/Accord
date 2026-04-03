@@ -3,7 +3,7 @@ using IPA.BuildProcess.Interfaces;
 
 namespace CrossAccord.Builder;
 
-public class AccordPatcher : IPostLinkerBuild
+public class AccordPatcher : IPostStagingBuild
 {
     public int executeOrder => 2;
     public void Execute(List<string> files, Dictionary<string, Assembly> _)
