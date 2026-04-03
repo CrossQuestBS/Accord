@@ -8,7 +8,7 @@ namespace CrossAccord.TestCases
     public partial class ExampleClassPatch
     {
         public MemberInfo MemberMethod => typeof(ExampleClass).GetMethod(nameof(ExampleClass.Example))!;
-        public void Postfix(ExampleClass instance)
+        public void Postfix(ExampleClass instance, ref string arg1)
         {
             Console.WriteLine("Hi mom!");
         }

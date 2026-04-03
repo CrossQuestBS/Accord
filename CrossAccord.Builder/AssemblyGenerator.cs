@@ -50,7 +50,7 @@ public class AssemblyGenerator
             var guid = Guid.NewGuid();
             var code = GetSyntaxTree(methodDefinition, guid);
 
-            var patchInfo = new PatcherInfo(methodDefinition.DeclaringModule.Name, methodDefinition.FullName, classType.FullName, code, guid);
+            var patchInfo = new PatcherInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
             
             output.Add(patchInfo);
         }
@@ -226,8 +226,6 @@ public class {generatedClassName} : IAccordPatcher
         }
         
         ms.Seek(0, SeekOrigin.Begin);
-
-
         ms.CopyTo(outputStream);
     }
 }

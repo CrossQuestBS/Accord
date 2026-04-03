@@ -1,12 +1,13 @@
 ﻿using System;
+using System.Threading.Tasks;
 
 namespace CrossAccord.TestCases
 {
     public class ExampleClass
     {
-        public void Example()
+        public void Example(ref string input)
         {
-            Console.WriteLine("What!");
+            Console.WriteLine(input);
         }
     }
 }

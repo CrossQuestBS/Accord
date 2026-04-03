@@ -26,6 +26,7 @@ public class AssemblyGeneratorTests
         _context.AddAssembly(assembly);
     }
 
+    [TestFixture]
     public class GeneratePatcherAssembly : AssemblyGeneratorTests
     {
         private PatcherInfo[] _patcherInfos;
@@ -59,9 +60,9 @@ public class AssemblyGeneratorTests
             Assert.That(patches.Length, Is.EqualTo(1));
 
             var patch = patches[0];
-            Assert.That(patch.AssemblyName, Is.EqualTo("CrossAccord.TestCases.dll"));
+            Assert.That(patch.AssemblyName, Is.EqualTo("CrossAccord.TestCases"));
             Assert.That(patch.TypeFullName, Is.EqualTo("CrossAccord.TestCases.ExampleClass"));
-            Assert.That(patch.MethodFullName, Is.EqualTo("System.Void CrossAccord.TestCases.ExampleClass::Example()"));
+            Assert.That(patch.MethodFullName, Is.EqualTo("System.Void CrossAccord.TestCases.ExampleClass::Example(System.String&)"));
             Assert.That(patch.GeneratedCode, !Is.Null);
         }
         

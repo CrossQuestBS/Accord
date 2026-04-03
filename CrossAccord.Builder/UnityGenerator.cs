@@ -52,8 +52,11 @@ public class UnityGenerator : IPreStagingBuild
 
         var outputAssemblyPath = Path.Join(Path.GetDirectoryName(libDirectoryFiles[0]), "CrossAccord.Generated.dll");
 
+        if (File.Exists(outputAssemblyPath))
+            File.Delete(outputAssemblyPath);
+        
         var fileStream = File.Create(outputAssemblyPath);
-
+      
         AssemblyGenerator.GeneratePatcherAssembly(patchers, assembliesToReference.ToArray(), fileStream);
         fileStream.Close();
     }
