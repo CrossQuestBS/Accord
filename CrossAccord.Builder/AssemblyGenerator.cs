@@ -1,5 +1,7 @@
+using System.Reflection;
 using AsmResolver;
 using AsmResolver.DotNet;
+using AsmResolver.DotNet.Collections;
 using AsmResolver.DotNet.Signatures;
 using Basic.Reference.Assemblies;
 using Microsoft.CodeAnalysis;
@@ -31,24 +33,35 @@ public class AssemblyGenerator
     {
         var argumentsCount = arguments.Count;
 
+        //Console.WriteLine($"Trying to find method: {name.Value}");
         var methodsFound = methods.Where(it =>
             it.Parameters.Count == argumentsCount &&
-            it.Name == name).ToList();
+            it.Name.Value == name.Value).ToList();
 
+        //Console.WriteLine($"Available methods found: {methodsFound.Count}");
         if (methodsFound.Count <= 0) return null;
+
+        if (methodsFound.Count == 1)
+            return methodsFound[0];
         
         var methodForSure = methodsFound.FirstOrDefault(it =>
         {
             var a = Enumerable.Range(0, argumentsCount)
-                .Where(i => it.Parameters[i].ParameterType == arguments[i])
+                .Where(i =>
+                {
+                    //Console.WriteLine($"Comarping: {it.Parameters[i].ParameterType.Name} == {((TypeSignature)arguments[i]).Name}");
+                    return it.Parameters[i].ParameterType.Name == ((TypeSignature)arguments[i]).Name;
+                })
                 .ToArray();
 
             return a.Length == argumentsCount;
         });
+        
+        Console.WriteLine($"Result is {methodForSure}");
         return methodForSure;
     }
     
-    private static PatcherInfo[] GetPatchesFromModule(RuntimeContext context, AsmResolver.DotNet.ModuleDefinition moduleDefinition)
+    private static PatcherInfo[] GetPatchesFromModule(RuntimeContext context, ModuleDefinition moduleDefinition)
     {
         List<PatcherInfo> output = new();
         
@@ -62,6 +75,7 @@ public class AssemblyGenerator
             var methodName = (Utf8String)arguments[1].Element;
 
             List<Object>? typeMethodArguments = null;
+            
             if (arguments.Count == 3)
             {
                 typeMethodArguments = (List<Object>)arguments[2].Elements;
@@ -84,6 +98,13 @@ public class AssemblyGenerator
 
             var guid = Guid.NewGuid();
             var code = GetSyntaxTree(methodDefinition, guid);
+            
+            Console.WriteLine(methodName);
+            Console.WriteLine(code);
+            Console.WriteLine();
+            Console.WriteLine();
+            Console.WriteLine();
+
 
             var patchInfo = new PatcherInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
             
@@ -104,7 +125,7 @@ public class AssemblyGenerator
     
     private static SyntaxTree GetSyntaxTree(MethodDefinition methodDefinition, Guid guid)
     { 
-        var fullClassName = methodDefinition.DeclaringType.FullName;
+        var fullClassName = methodDefinition.DeclaringType.FullName.Replace("+", ".");
         var methodName = methodDefinition.Name.ToString();
         var generatedClassName = $"{methodName}Patcher_{guid.ToClassSafeString()}".Replace(".ctor", "Constructor");
 
@@ -125,7 +146,7 @@ public class AssemblyGenerator
         {
             
             simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "" : "ref")} arg{idx + 1}").ToArray());
-            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "in" : "ref")} global::{it.ParameterType.FullName.Replace("&", "").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "")} arg{idx+1}").ToArray());
+            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "in" : "ref")} global::{Replace(it)} arg{idx+1}").ToArray());
         }
 
         if (methodDefinition.Signature.ReturnType.Name != "Void")
@@ -134,10 +155,16 @@ public class AssemblyGenerator
             simpleParameters.Add("ref returnValue");
         }
 
+        var arguments =
+            String.Join(",", methodDefinition.Parameters.Select(it => $"typeof(global::{Replace(it)})"));
+
         parameters = string.Join(", ", totalParameters);
         parameterSimpleValue = string.Join(", ", simpleParameters);
 
-        return CSharpSyntaxTree.ParseText($@"using System;
+        var assemblyName = methodDefinition.DeclaringModule.Assembly.Name.Value.Replace(".dll", "");
+
+        return CSharpSyntaxTree.ParseText($@"
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using CrossAccord.Common.Interfaces;
@@ -145,11 +172,11 @@ using CrossAccord.Common;
 
 namespace CrossAccord.Generated.{fullClassName}.{methodName.Replace(".", "Dot")};
 
-
 public class {generatedClassName} : IAccordPatcher
 {{
-    public static MemberInfo OriginalMemberInfo {{ get; }} =
-        typeof(global::{fullClassName}).GetMember(""{methodName}"", (global::System.Reflection.BindingFlags)~0)[0]!;
+    public global::System.Type MethodType => typeof(global::{fullClassName});
+    public string MethodName => ""{methodDefinition.Name.Value}"";
+    public global::System.Type[] Arguments => new global::System.Type[] {{{arguments}}};
 
     private delegate bool PrefixDelegate({parameters});
 
@@ -168,14 +195,14 @@ public class {generatedClassName} : IAccordPatcher
     {{
         var prefixMethodInfo = instance.GetPatchMethodInfo(""Prefix"");
 
-        if (prefixMethodInfo is not null && prefixMethodInfo.ValidatePatch(OriginalMemberInfo))
+        if (prefixMethodInfo is not null)
         {{
             PrefixDict.Add(instance, (PrefixDelegate)Delegate.CreateDelegate(typeof(PrefixDelegate), instance, prefixMethodInfo));
         }}
 
         var postfixMethodInfo = instance.GetPatchMethodInfo(""Postfix"");
 
-        if (postfixMethodInfo is not null && postfixMethodInfo.ValidatePatch(OriginalMemberInfo))
+        if (postfixMethodInfo is not null)
         {{
             PostfixDict.Add(instance, (PostfixDelegate)Delegate.CreateDelegate(typeof(PostfixDelegate), instance, postfixMethodInfo));
         }}
@@ -222,6 +249,15 @@ public class {generatedClassName} : IAccordPatcher
 }}");
     }
 
+    private static string Replace(Parameter it)
+    {
+        var parameterName = it.ParameterType.FullName;
+        var part1 = parameterName.Split("`")[0] + "<";
+        var part2 = parameterName.Split("`")[1].Split("<")[1];
+        parameterName = part1 + part2;
+        return parameterName.Replace("&", "").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "");
+    }
+
     public static void GeneratePatcherAssembly(PatcherInfo[] allPatchers, string[] assemblies, Stream outputStream)
     {
         var patchers = allPatchers;
@@ -234,13 +270,18 @@ public class {generatedClassName} : IAccordPatcher
         {
             metadataReferences.Add(MetadataReference.CreateFromFile(assemblyPath));
         }
+
+        var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
+        var topLevelBinderFlagsProperty = typeof(CSharpCompilationOptions).GetProperty("TopLevelBinderFlags", BindingFlags.Instance | BindingFlags.NonPublic);
+        topLevelBinderFlagsProperty.SetValue(compilationOptions, (uint)1 << 22);
+
         
         CSharpCompilation compilation = CSharpCompilation.Create(
             "CrossAccord.Generated",
             syntaxTrees: patchers.Select(it => it.GeneratedCode),
             references: metadataReferences.ToArray(),
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-
+            options: compilationOptions);
+      
         using var ms = new MemoryStream();
 
         EmitResult result = compilation.Emit(ms);

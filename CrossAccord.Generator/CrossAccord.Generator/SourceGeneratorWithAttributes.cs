@@ -86,14 +86,14 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
                     currParameter += "ref ";
                 }
                 
-                var parameterNamespace = parameterSymbol.Type.ContainingNamespace.ToDisplayString().Replace("<global namespace>", "global::");
+                /*var parameterNamespace = parameterSymbol.Type.ContainingNamespace.ToDisplayString().Replace("<global namespace>", "global::");
 
                 if (parameterNamespace.Length > 0 && parameterNamespace != "global::")
                 {
                     currParameter += parameterNamespace + ".";
-                }
+                }*/
 
-                currParameter += $"{parameterSymbol.Type.Name.Replace("<global namespace>", "global::")} arg{i + 1}";
+                currParameter += $"{parameterSymbol.Type.ToDisplayString().Replace("<global namespace>", "global::")} arg{i + 1}";
 
                 listParameters.Add(currParameter);
             }

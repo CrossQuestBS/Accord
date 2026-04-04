@@ -64,7 +64,7 @@ public class AssemblyPatcherTests
             {
                 var type = FindPatchType(patcherInfo);
                 Assert.That(type.Methods.Any(it => it.Name.ToString().StartsWith("Orig_")), Is.True);
-                Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(2));
+                Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(3));
             }
         }
         
@@ -98,7 +98,7 @@ public class AssemblyPatcherTests
             AssemblyPatcherV2.AddPatcher(_moduleDefinition, type, patched, methodDefinition);
             
             Assert.That(type.Methods.Any(it => it.Name.ToString().StartsWith("Orig_")), Is.True);
-            Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(2));
+            Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(3));
         }
     }
 

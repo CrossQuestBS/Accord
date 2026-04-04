@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace CrossAccord.TestCases
@@ -10,9 +11,9 @@ namespace CrossAccord.TestCases
             Console.WriteLine(input);
         }
         
-        public void Example(int input)
+        public void Example(List<string> supportGenerics)
         {
-            Console.WriteLine(input);
+            Console.WriteLine(supportGenerics);
         }
     }
 }

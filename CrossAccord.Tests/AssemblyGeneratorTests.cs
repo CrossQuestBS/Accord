@@ -1,6 +1,8 @@
-﻿using AsmResolver;
+﻿using System.Reflection;
+using AsmResolver;
 using AsmResolver.DotNet;
 using CrossAccord.Builder;
+using CrossAccord.Common.Attributes;
 
 namespace CrossAccord.Tests;
 
