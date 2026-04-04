@@ -138,13 +138,39 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
             
             if (generatedAttribute.ConstructorArguments[1].Value is not string methodName)
                 continue;
+
+            List<INamedTypeSymbol>? argumentsTypes = null;
+            if (generatedAttribute.ConstructorArguments.Length > 2)
+            {
+                argumentsTypes = new List<INamedTypeSymbol>();
+                foreach (var arguments in generatedAttribute.ConstructorArguments[2].Values)
+                {
+                    argumentsTypes.Add((INamedTypeSymbol)arguments.Value);
+                }
+            }
             
             var methods = patchClassSymbol.GetMembers().OfType<IMethodSymbol>().ToArray();
             
             if (methods.Length == 0)
                 continue;
-            
-            var method = patchClassSymbol.GetMembers().OfType<IMethodSymbol>().FirstOrDefault(it => it.Name == methodName);
+
+            IMethodSymbol? method = null;
+            if (argumentsTypes is not null)
+            {
+                var firstIter = patchClassSymbol.GetMembers()
+                    .OfType<IMethodSymbol>()
+                    .Where(it => it.Name == methodName && it.Parameters.Length == argumentsTypes.Count);
+
+                method = firstIter.First(it =>
+                {
+                    var a = Enumerable.Range(0, argumentsTypes.Count)
+                        .Where(i => it.Parameters[i].Type.MetadataName == argumentsTypes[i].MetadataName)
+                        .ToArray();
+
+                    return a.Length == argumentsTypes.Count;
+                });
+            } else
+                method = patchClassSymbol.GetMembers().OfType<IMethodSymbol>().FirstOrDefault(it => it.Name == methodName);
 
             if (method is null)
             {

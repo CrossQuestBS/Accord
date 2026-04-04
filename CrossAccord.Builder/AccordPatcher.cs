@@ -18,7 +18,9 @@ public class AccordPatcher : IPostStagingBuild
         if (stagingPath is null)
             throw new DirectoryNotFoundException($"Could not find staging directory from {assemblyPath}");
 
-        var context = new RuntimeContext(targetRuntime: DotNetRuntimeInfo.NetStandard(2, 1));
+        String[] directories = {stagingPath};
+        var context = new RuntimeContext(targetRuntime: DotNetRuntimeInfo.NetFramework(4, 0),
+            searchDirectories: directories);
         
         var generatedAssemblyPath = Path.Join(stagingPath, "CrossAccord.Generated.dll");
         
@@ -27,13 +29,13 @@ public class AccordPatcher : IPostStagingBuild
         context.LoadAssembly(generatedAssemblyPath);
         foreach (var assembly in uniqueAssemblies)
         {
-            var path = files.FirstOrDefault(it => it.EndsWith(assembly + ".dll"));
+            var path = files.FirstOrDefault(it => Path.GetFileName(it) == assembly + ".dll");
             
+            Console.WriteLine($"Path: {path}");
             if (path is not null)
                 context.LoadAssembly(path);
         }
-
-
+        
         foreach (var patcherInfo in SharedState.PatcherInfos)
         {
             Console.WriteLine(patcherInfo);

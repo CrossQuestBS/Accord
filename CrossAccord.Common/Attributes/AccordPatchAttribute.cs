@@ -9,8 +9,23 @@ namespace CrossAccord.Common.Attributes;
 /// <param name="declaringType"></param>
 /// <param name="methodName"></param>
 [AttributeUsage(AttributeTargets.Class)]
-public class AccordPatchAttribute(Type declaringType, string methodName) : Attribute
+public class AccordPatchAttribute : Attribute
 {
-    public Type DeclaringType = declaringType;
-    public string MethodName = methodName;
+    public AccordPatchAttribute(Type declaringType, string methodName)
+    {
+        DeclaringType = declaringType;
+        MethodName = methodName;
+        Arguments = null;
+    }
+    
+    public AccordPatchAttribute(Type declaringType, string methodName, Type[] arguments)
+    {
+        DeclaringType = declaringType;
+        MethodName = methodName;
+        Arguments = arguments;
+    }
+
+    public Type DeclaringType;
+    public Type[]? Arguments;
+    public string MethodName;
 }

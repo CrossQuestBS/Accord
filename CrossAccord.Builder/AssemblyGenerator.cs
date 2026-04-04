@@ -27,6 +27,27 @@ public class AssemblyGenerator
         return output.GroupBy(it => $"{it.AssemblyName}_{it.MethodFullName}").Select(x => x.First()).ToArray();;
     }
 
+    public static MethodDefinition? GetMethodFromNameAndArguments(List<MethodDefinition> methods, Utf8String name, List<Object> arguments)
+    {
+        var argumentsCount = arguments.Count;
+
+        var methodsFound = methods.Where(it =>
+            it.Parameters.Count == argumentsCount &&
+            it.Name == name).ToList();
+
+        if (methodsFound.Count <= 0) return null;
+        
+        var methodForSure = methodsFound.FirstOrDefault(it =>
+        {
+            var a = Enumerable.Range(0, argumentsCount)
+                .Where(i => it.Parameters[i].ParameterType == arguments[i])
+                .ToArray();
+
+            return a.Length == argumentsCount;
+        });
+        return methodForSure;
+    }
+    
     private static PatcherInfo[] GetPatchesFromModule(RuntimeContext context, AsmResolver.DotNet.ModuleDefinition moduleDefinition)
     {
         List<PatcherInfo> output = new();
@@ -40,12 +61,26 @@ public class AssemblyGenerator
             var classType = (TypeDefOrRefSignature)arguments[0].Element!;
             var methodName = (Utf8String)arguments[1].Element;
 
+            List<Object>? typeMethodArguments = null;
+            if (arguments.Count == 3)
+            {
+                typeMethodArguments = (List<Object>)arguments[2].Elements;
+            }
+
             if (!classType.TryResolve(context, out TypeDefinition definition))
                 continue;
 
-            var methodDefinition = definition.Methods.FirstOrDefault(it =>
+            MethodDefinition methodDefinition;
+            if (typeMethodArguments != null)
+            {
+                methodDefinition = GetMethodFromNameAndArguments(definition.Methods.ToList(), methodName, typeMethodArguments);
+            }
+            else 
+                methodDefinition = definition.Methods.FirstOrDefault(it =>
                 it.Name == methodName && it.DeclaringType.FullName == classType.FullName);
-            
+
+            if (methodDefinition is null)
+                throw new Exception("Failed to find method!");
 
             var guid = Guid.NewGuid();
             var code = GetSyntaxTree(methodDefinition, guid);

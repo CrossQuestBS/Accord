@@ -25,15 +25,14 @@ public class AssemblyPatcherV2
         public override void OnClonedMethod(MethodDefinition original, MethodDefinition cloned) {
             cloned.Name = $"Orig_{original.Name}";
 
-            foreach (var parameter in cloned.Parameters)
+            /*foreach (var parameter in cloned.Parameters)
             {
-                
                 if (parameter.ParameterType.ElementType == ElementType.ByRef)
                     continue;
                
                 var referenceType = parameter.ParameterType.MakeByReferenceType();
                 parameter.ParameterType = referenceType;
-            }
+            }*/
         }
     }
     
@@ -73,6 +72,10 @@ public class AssemblyPatcherV2
 
         var assemblies = context.GetLoadedAssemblies();
         var generatedPatchAssembly = assemblies.FirstOrDefault(it => it.Name.ToString() == "CrossAccord.Generated");
+
+        if (generatedPatchAssembly is null)
+            throw new Exception("Generated patch is null");
+        
         foreach (var groupPatches in patcherGroupedByAssemblyPath)
         {
             var assembly = assemblies.FirstOrDefault(it => it.Name.ToString() == groupPatches.Key);
@@ -147,7 +150,13 @@ public class AssemblyPatcherV2
             new CilInstruction(CilOpCodes.Brfalse, label)
         );
         
-        PrepareArguments(originalMethod, methodCILBody, isInstanceMethod);
+        if (isInstanceMethod)
+            methodCILBody.Instructions.Add(CilOpCodes.Ldarg_0);
+        
+        foreach (var parameter in originalMethod.Parameters)
+        {
+            methodCILBody.Instructions.Add(CilOpCodes.Ldarg, parameter);
+        }
         
         methodCILBody.Instructions.Add(CilOpCodes.Call, clonedMethod);
 

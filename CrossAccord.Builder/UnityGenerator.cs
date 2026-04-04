@@ -30,7 +30,7 @@ public class UnityGenerator : IPreStagingBuild
         var extraPaths = files.Values.SelectMany(it => it.Select(path => Path.GetDirectoryName(path))).ToHashSet();
         
         var context = new RuntimeContext(
-            targetRuntime: DotNetRuntimeInfo.NetStandard(2, 1),
+            targetRuntime: DotNetRuntimeInfo.NetFramework(4, 0),
             searchDirectories: extraPaths
         );
 

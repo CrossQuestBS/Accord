@@ -62,7 +62,7 @@ public class AssemblyGeneratorTests
             var patch = patches[0];
             Assert.That(patch.AssemblyName, Is.EqualTo("CrossAccord.TestCases"));
             Assert.That(patch.TypeFullName, Is.EqualTo("CrossAccord.TestCases.ExampleClass"));
-            Assert.That(patch.MethodFullName, Is.EqualTo("System.Void CrossAccord.TestCases.ExampleClass::Example(System.String&)"));
+            Assert.That(patch.MethodFullName, Is.EqualTo("System.Void CrossAccord.TestCases.ExampleClass::Example(System.String)"));
             Assert.That(patch.GeneratedCode, !Is.Null);
         }
         
