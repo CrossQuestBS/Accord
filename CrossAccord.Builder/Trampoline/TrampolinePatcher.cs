@@ -1,12 +1,88 @@
-using System.Reflection;
+/*using System.Reflection;
+using AsmResolver.DotNet;
+using AsmResolver.DotNet.Code.Cil;
+using AsmResolver.DotNet.Serialized;
+using AsmResolver.DotNet.Signatures;
+using AsmResolver.PE.DotNet.Cil;
 using CrossAccord.ILTrampoline.Interfaces;
-using Mono.Cecil;
 using Mono.Cecil.Cil;
+using AssemblyDefinition = Mono.Cecil.AssemblyDefinition;
+using AssemblyDefinition2 = AsmResolver.DotNet.AssemblyDefinition;
+
+using CustomAttribute = Mono.Cecil.CustomAttribute;
+using TypeDefinition = Mono.Cecil.TypeDefinition;
+using TypeReference = Mono.Cecil.TypeReference;
 
 namespace CrossAccord.Builder.Trampoline;
 
+
 public static class TrampolinePatcher
 {
+
+    public static void PatchAssembly(AssemblyDefinition2 assemblyDefinition, RuntimeContext context, List<TrampolinePatchInfo> patches, Dictionary<string, Assembly> assembliesContext)
+    {
+        var trampolineGroups = patches.GroupBy(it => it.MethodFullName);
+
+        foreach (var trampolineGroup in trampolineGroups)
+        {
+            var methodFullName = trampolineGroup.Key;
+
+            // TODO: Fix!
+            MethodDefinition methodFound = null;
+            var cilMethodBody = methodFound.CilMethodBody;
+
+            foreach (var patchInfo in trampolineGroup)
+            {
+                
+                // Todo fix
+                CilInstruction origStartFound = null;
+                
+                // Todo fix2
+                CilInstruction origStartEnd = null;
+                
+                // Todo fix3
+                TypeSignature patcherModType = null;
+
+                // Todo fix4
+                IEnumerable<CilInstruction> instructionsModified = new []{ new CilInstruction(CilOpCodes.Nop)};
+
+                // Todo fix5
+                IMethodDefOrRef getInstanceDefinition = null;
+                
+                
+                var _origStartLabel = origStartFound.CreateLabel();
+
+                CilInstructionLabel _startPatchLabel = new CilInstructionLabel();
+                CilInstructionLabel _endPatchLabel = new CilInstructionLabel();
+
+                var branchBack = new CilInstruction(CilOpCodes.Br, _endPatchLabel);
+                
+                cilMethodBody.Instructions.InsertBefore(origStartFound,  new CilInstruction(CilOpCodes.Br, _startPatchLabel));
+                cilMethodBody.Instructions.InsertAfter(origStartEnd, branchBack);
+
+                //Setup before and after patched instructions
+                CilInstruction startPatchInstruction = new CilInstruction(CilOpCodes.Nop);
+                _startPatchLabel.Instruction = startPatchInstruction;
+                cilMethodBody.Instructions.InsertAfter(branchBack, startPatchInstruction);
+
+                CilInstruction endPatchInstruction = new CilInstruction(CilOpCodes.Nop);
+                _endPatchLabel.Instruction = endPatchInstruction;
+                cilMethodBody.Instructions.InsertAfter(startPatchInstruction, endPatchInstruction);
+
+                cilMethodBody.Instructions.InsertBefore(endPatchInstruction, new CilInstruction(CilOpCodes.Call, getInstanceDefinition));
+                cilMethodBody.Instructions.InsertBefore(endPatchInstruction, new CilInstruction(CilOpCodes.Brfalse, _origStartLabel));
+
+                foreach (var cilInstruction in instructionsModified)
+                {
+                    cilMethodBody.Instructions.InsertBefore(endPatchInstruction, cilInstruction);
+                }
+
+            }
+
+        }
+        
+    }
+    
     public static void PatchAssembly(string assemblyPath, List<TrampolinePatchInfo> patches, string[] extraPaths,
         Dictionary<string, Assembly> assembliesContext)
     {
@@ -81,7 +157,7 @@ public static class TrampolinePatcher
                 #region EndOffset
 
                 var endOffset = instructionsFromOffset.First(trampoline.EndOffset);
-                var endOffsetIdx = Array.IndexOf(instructionsFromOffset, endOffset) + 1;
+                var endOffsetIdx = Array.IndexOf(instructionsFromOffset, endOffset);
 
                 #endregion
 
@@ -102,28 +178,33 @@ public static class TrampolinePatcher
 
                 #endregion
 
-                Instruction endPatch = !Labels.TryGetValue("EndPatch", out var patch)
-                    ? SetupEndPatch(ilProcessor, Labels, instructions[^1])
-                    : patch;
 
-                var trampolineInstructions =
-                    trampoline.PatchTrampoline(duplicateInstructions, patchType, variableDefinition).ToArray();
+                Instruction _startNop = Instruction.Create(OpCodes.Nop);
+                Instruction _endNop = Instruction.Create(OpCodes.Nop);
 
-                var goingBack = instructionsFromOffset[endOffsetIdx];
+                
+                var origEnd = instructionsFromOffset[endOffsetIdx];
+
+                ilProcessor.InsertAfter(origEnd, _startNop);
+                ilProcessor.InsertAfter(_startNop, _endNop);
+                ilProcessor.InsertBefore(_startNop, Instruction.Create(OpCodes.Br, _endNop));
+
+                
                 var startPlace = instructionsFromOffset[0];
                 var loadVariable = ilProcessor.Create(OpCodes.Ldloc, variableDefinition);
                 var branchInstruction = ilProcessor.Create(OpCodes.Brfalse, startPlace);
-                var branchBack = ilProcessor.Create(OpCodes.Br, goingBack);
 
-                ilProcessor.InsertBefore(endPatch, loadVariable);
-                ilProcessor.InsertBefore(endPatch, branchInstruction);
+                ilProcessor.InsertBefore(_endNop, loadVariable);
+                ilProcessor.InsertBefore(_endNop, branchInstruction);
+                
+                var trampolineInstructions =
+                    trampoline.PatchTrampoline(duplicateInstructions, patchType, variableDefinition).ToArray();
+               
 
                 foreach (var instruction in trampolineInstructions)
                 {
-                    ilProcessor.InsertBefore(endPatch, instruction);
+                    ilProcessor.InsertBefore(_endNop, instruction);
                 }
-
-                ilProcessor.InsertAfter(trampolineInstructions[^1], branchBack);
 
                 var updatedBranch = false;
                 foreach (var instruction in instructions)
@@ -131,14 +212,14 @@ public static class TrampolinePatcher
                     if (instruction.Operand is not Instruction instructionOperand) continue;
                     if (instructionOperand.Offset == startOffset.Offset)
                     {
-                        instruction.Operand = loadVariable;
+                        instruction.Operand = _startNop;
                         updatedBranch = true;
                     }
                 }
 
                 if (!updatedBranch)
                 {
-                    ilProcessor.InsertBefore(instructionsFromOffset[0], ilProcessor.Create(OpCodes.Br, loadVariable));
+                    ilProcessor.InsertBefore(instructionsFromOffset[0], ilProcessor.Create(OpCodes.Br, _startNop));
                 }
             }
         }
@@ -146,17 +227,7 @@ public static class TrampolinePatcher
         assembly.Write(assemblyPath);
     }
 
-    static Instruction SetupEndPatch(ILProcessor ilProcessor, Dictionary<string, Instruction> labels,
-        Instruction lastInstruction)
-    {
-        var startNop = ilProcessor.Create(OpCodes.Nop);
-
-        labels.Add("EndPatch", startNop);
-        ilProcessor.InsertBefore(lastInstruction, startNop);
-        ilProcessor.InsertBefore(startNop, ilProcessor.Create(OpCodes.Br, lastInstruction));
-        return startNop;
-    }
-
+    
     static VariableDefinition createTrampolineModDefinition(TypeDefinition typeDefinition,
         TypeDefinition trampolineModInstance)
     {
@@ -250,4 +321,4 @@ public static class TrampolinePatcher
         trampoline = (IAccordTrampolineBuild)Activator.CreateInstance(typeName)!;
         return true;
     }
-}
+}*/

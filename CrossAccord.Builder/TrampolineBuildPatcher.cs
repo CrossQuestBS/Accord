@@ -4,7 +4,7 @@ using IPA.BuildProcess.Interfaces;
 
 namespace CrossAccord.Builder;
 
-public class TrampolineBuildPatcher : IPostStagingBuild
+/*public class TrampolineBuildPatcher : IPostStagingBuild
 {
     public int executeOrder => 1;
     public void Execute(List<string> files, Dictionary<string, Assembly> assemblyDic)
@@ -24,7 +24,7 @@ public class TrampolineBuildPatcher : IPostStagingBuild
 
         Console.WriteLine("Running with patches!");
 
-        
+
         foreach (var (key, value) in patches)
         {
             Console.WriteLine($"Running with patches for: {key}");
@@ -34,8 +34,8 @@ public class TrampolineBuildPatcher : IPostStagingBuild
                 Console.WriteLine($"Method: {patch.MethodFullName}");
                 Console.WriteLine($"TrampolineType: {patch.TrampolineTypeFullName}");
             }
-            
+
             TrampolinePatcher.PatchAssembly(key, value, files.ToArray(), assemblyDic);
         }
     }
-}
+}*/

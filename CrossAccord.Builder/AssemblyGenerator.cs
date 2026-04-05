@@ -161,9 +161,9 @@ public class AssemblyGenerator
         parameters = string.Join(", ", totalParameters);
         parameterSimpleValue = string.Join(", ", simpleParameters);
 
-        var assemblyName = methodDefinition.DeclaringModule.Assembly.Name.Value.Replace(".dll", "");
 
         return CSharpSyntaxTree.ParseText($@"
+using System.Runtime.CompilerServices;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -214,7 +214,7 @@ public class {generatedClassName} : IAccordPatcher
         PostfixDict.Remove(instance);
     }}
 
-    public bool Prefix({parameters})
+    bool Prefix({parameters})
     {{
         foreach (var keyValue in PrefixDict)
         {{
@@ -232,7 +232,7 @@ public class {generatedClassName} : IAccordPatcher
         return true;
     }}
 
-    public void Postfix({parameters})
+    void Postfix({parameters})
     {{
         foreach (var keyValue in PostfixDict)
         {{
@@ -252,10 +252,15 @@ public class {generatedClassName} : IAccordPatcher
     private static string Replace(Parameter it)
     {
         var parameterName = it.ParameterType.FullName;
-        var part1 = parameterName.Split("`")[0] + "<";
-        var part2 = parameterName.Split("`")[1].Split("<")[1];
-        parameterName = part1 + part2;
-        return parameterName.Replace("&", "").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "");
+
+        if (parameterName.Contains("`") && parameterName.Contains("<"))
+        {
+            var part1 = parameterName.Split("`")[0] + "<";
+            var part2 = parameterName.Split("`")[1].Split("<")[1];
+            parameterName = part1 + part2;
+        }
+        
+        return parameterName.Replace("&", "").Replace("+", ".").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "");
     }
 
     public static void GeneratePatcherAssembly(PatcherInfo[] allPatchers, string[] assemblies, Stream outputStream)
@@ -274,7 +279,8 @@ public class {generatedClassName} : IAccordPatcher
         var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
         var topLevelBinderFlagsProperty = typeof(CSharpCompilationOptions).GetProperty("TopLevelBinderFlags", BindingFlags.Instance | BindingFlags.NonPublic);
         topLevelBinderFlagsProperty.SetValue(compilationOptions, (uint)1 << 22);
-
+        
+        
         
         CSharpCompilation compilation = CSharpCompilation.Create(
             "CrossAccord.Generated",
@@ -294,7 +300,7 @@ public class {generatedClassName} : IAccordPatcher
             
             foreach (Diagnostic diagnostic in failures)
             {
-                throw new Exception(string.Format("Failed to compile code '{0}'! {1}: {2}", "Uhm?", diagnostic.Id,
+                throw new Exception(string.Format("Failed to compile code '{0}'! {1}: {2}", diagnostic.AdditionalLocations, diagnostic.Id,
                     diagnostic.GetMessage()));
             }
 

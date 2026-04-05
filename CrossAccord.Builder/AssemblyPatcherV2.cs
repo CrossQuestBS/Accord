@@ -7,14 +7,7 @@ using AsmResolver.PE.DotNet.Metadata.Tables;
 
 namespace CrossAccord.Builder;
 
-public static class CilExtensions
-{
-    public static void InsertBefore(this CilInstructionCollection self, CilInstruction target,
-        CilInstruction instruction)
-    {
-        self.Insert(self.IndexOf(target), instruction);
-    }
-}
+
 
 public class AssemblyPatcherV2
 {
@@ -120,6 +113,7 @@ public class AssemblyPatcherV2
             throw new ArgumentException(nameof(originalMethod));
         
         methodCILBody.Instructions.Clear();
+        methodCILBody.ExceptionHandlers.Clear();
         
         CilLocalVariable? returnValue = null;
         
