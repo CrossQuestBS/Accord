@@ -1,45 +1,86 @@
-using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
-using AsmResolver.DotNet.Signatures;
 using AsmResolver.PE.DotNet.Cil;
+using CrossAccord.ILTrampoline.Interfaces;
 
 namespace CrossAccord.Builder.Trampoline;
 
-public class TrampolineCilInfo(
-    IReadOnlyList<CilInstruction> matched,
-    IEnumerable<CilInstruction> modified,
-    IMethodDefOrRef trampolineInstanceRef,
-    TypeSignature trampolineInstanceType)
-{
-    public IReadOnlyList<CilInstruction> Matched { get; } = matched;
-    public IEnumerable<CilInstruction> Modified { get; } = modified;
-    public IMethodDefOrRef TrampolineInstanceRef { get; } = trampolineInstanceRef;
-    public TypeSignature TrampolineInstanceType { get; } = trampolineInstanceType;
-}
-
-public static class CilExtensions
-{
-    
-    public static void InsertBefore(this CilInstructionCollection self, CilInstruction target,
-        CilInstruction instruction)
-    {
-        // Required for self.IndexOf to return correct
-        self.CalculateOffsets();
-        var index = self.IndexOf(target);
-        self.Insert(index, instruction);
-    }
-    
-    public static void InsertAfter(this CilInstructionCollection self, CilInstruction target,
-        CilInstruction instruction)
-    {
-        self.CalculateOffsets();
-        var index = self.IndexOf(target) + 1;
-        self.Insert(index, instruction);
-    }
-}
 
 public static class TrampolinePatcherV2
 {
+    public static CilInstruction[]? GetMatchedInstructions(CilInstructionCollection instructions, IAccordTrampolineBuild trampoline)
+    {
+        var matchStart = trampoline.MatchInstructions().GetEnumerator();
+        
+        List<List<CilMatchResult>> matches = new();
+
+        var matchIndex = 0;
+        while (matchStart.MoveNext())
+        {
+            List<CilMatchResult> currentMatches = new ();
+            
+            if (matchStart.Current is null)
+                break;
+            
+            for (int i = 0; i < instructions.Count; i++)
+            {
+                var matchResult = matchStart.Current(instructions[i]);
+                if (matchResult != CilMatch.None)
+                    currentMatches.Add(new CilMatchResult(matchResult, i));
+            }
+            
+            matches.Add(currentMatches);
+            matchIndex++;
+        }
+
+        var firstMatchList = matches[0];
+
+        int startIndex = -1;
+        int endIndex = -1;
+
+        bool foundMatch = false;
+        
+        foreach (var firstMatch in firstMatchList)
+        {
+            if (firstMatch.Match == CilMatch.Start)
+                startIndex = firstMatch.Index;
+
+            int count = 1;
+            
+            for (int i = 1; i < matches.Count; i++)
+            {
+                var currentMatch = matches[i];
+
+                var hasNextMatch = currentMatch.FirstOrDefault(it => it.Index == firstMatch.Index + i);
+                if (hasNextMatch is null)
+                    continue;
+
+                switch (hasNextMatch.Match)
+                {
+                    case CilMatch.Start:
+                        startIndex = hasNextMatch.Index;
+                        break;
+                    case CilMatch.End:
+                        endIndex = hasNextMatch.Index;
+                        break;
+                }
+
+                count++;
+            }
+
+            if (count == matches.Count)
+            {
+                foundMatch = true;
+                break;
+            }
+        }
+
+        if (foundMatch)
+            return instructions.ToArray()[startIndex..(endIndex+1)];
+
+
+        return null;
+    }
+    
     public static void AddTrampoline(CilMethodBody methodBody, TrampolineCilInfo trampolineCilInfo)
     {
         var instructions = methodBody.Instructions;
@@ -65,6 +106,7 @@ public static class TrampolinePatcherV2
 
         AddTrampolineCil(methodBody, trampolineCilInfo, matchedStartLabel, instructions, trampolineEnd);
     }
+    
 
     private static void AddTrampolineCil(CilMethodBody methodBody, TrampolineCilInfo trampolineCilInfo,
         ICilLabel matchedStartLabel, CilInstructionCollection instructions, CilInstruction trampolineEnd)

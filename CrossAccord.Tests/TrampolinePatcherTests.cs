@@ -1,7 +1,9 @@
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
+using AsmResolver.DotNet.Serialized;
 using AsmResolver.PE.DotNet.Cil;
 using CrossAccord.Builder.Trampoline;
+using CrossAccord.ILTrampoline.Interfaces;
 
 namespace CrossAccord.Tests;
 
@@ -10,7 +12,6 @@ public class TrampolinePatcherTests
     private RuntimeContext _context;
     private string _assemblyPath;
     private AssemblyDefinition? _assemblyDefinition;
-
 
 
     [SetUp]
@@ -26,6 +27,65 @@ public class TrampolinePatcherTests
         _assemblyDefinition = assembly;
     }
 
+
+    public class TestTrampoline : IAccordTrampolineBuild
+    {
+        public IEnumerable<Func<CilInstruction, CilMatch>> MatchInstructions()
+        {
+            yield return (instruction => instruction.OpCode == CilOpCodes.Newobj ? CilMatch.Start : CilMatch.None);
+            yield return (instruction =>
+            {
+                if (instruction.OpCode != CilOpCodes.Callvirt ||
+                    instruction.Operand is not MemberReference memberReference ||
+                    memberReference.Name != "Next")
+                    return CilMatch.None;
+
+                return CilMatch.Strict;
+            });
+            yield return (instruction => instruction.OpCode == CilOpCodes.Ldc_I4_S ? CilMatch.Strict : CilMatch.None);
+            yield return (instruction => instruction.OpCode == CilOpCodes.Rem ? CilMatch.Strict : CilMatch.None);
+            yield return (instruction => instruction.OpCode == CilOpCodes.Stloc_0 ? CilMatch.End : CilMatch.None);
+        }
+
+        public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions,
+            TypeDefinition definition, CilLocalVariable instance)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    [TestFixture]
+    public class GetMatchedInstructions : TrampolinePatcherTests
+    {
+        private CilMethodBody? _methodBody;
+        private TypeDefinition? _definition;
+        private TypeDefinition? _trampolineType;
+
+        [SetUp]
+        public void FixtureSetup()
+        {
+            _definition = _assemblyDefinition.ManifestModule.GetAllTypes()
+                .FirstOrDefault(it => it.Name.Contains("TrampolineExampleClass"));
+            _methodBody = _definition.Methods.FirstOrDefault(it => it.Name == "Example").CilMethodBody;
+
+            _trampolineType = _assemblyDefinition.ManifestModule.GetAllTypes()
+                .FirstOrDefault(it => it.Name == "ExampleTrampolineMod");
+        }
+
+        [Test]
+        public void Test()
+        {
+            var matches = TrampolinePatcherV2.GetMatchedInstructions(
+                _methodBody.Instructions,
+                new TestTrampoline()
+            );
+
+            Assert.That(matches.Length, Is.EqualTo(5));
+            Assert.That(matches[0].OpCode, Is.EqualTo(CilOpCodes.Newobj));
+            Assert.That(matches[^1].OpCode, Is.EqualTo(CilOpCodes.Stloc_0));
+        }
+    }
+
     [TestFixture]
     public class AddTrampoline : TrampolinePatcherTests
     {
@@ -33,34 +93,34 @@ public class TrampolinePatcherTests
         private TypeDefinition? _definition;
         private TypeDefinition? _trampolineType;
 
-        
-        
+
         [SetUp]
         public void Setup2()
         {
             _definition = _assemblyDefinition.ManifestModule.GetAllTypes()
                 .FirstOrDefault(it => it.Name.Contains("TrampolineExampleClass"));
             _methodBody = _definition.Methods.FirstOrDefault(it => it.Name == "Example").CilMethodBody;
-            
+
             _trampolineType = _assemblyDefinition.ManifestModule.GetAllTypes()
                 .FirstOrDefault(it => it.Name == "ExampleTrampolineMod");
         }
 
         public List<CilInstruction> CorrectFindInstructions(CilInstructionCollection instructionCollection)
         {
-            var startOffset = instructionCollection.ToList().FindIndex(instruction => instruction.OpCode == CilOpCodes.Newobj);
+            var startOffset = instructionCollection.ToList()
+                .FindIndex(instruction => instruction.OpCode == CilOpCodes.Newobj);
 
             var offsetInstructions = instructionCollection.ToList()[startOffset..];
-            
-            
+
+
             var endOffset = offsetInstructions.ToList().FindIndex(instruction =>
             {
                 return instruction.OpCode == CilOpCodes.Stloc || instruction.OpCode == CilOpCodes.Stloc_0;
             });
 
-            return offsetInstructions[..(endOffset+1)];
+            return offsetInstructions[..(endOffset + 1)];
         }
-        
+
         public List<CilInstruction> WrongFindInstructions(CilInstructionCollection instructionCollection)
         {
             var startOffset = instructionCollection.ToList().FindIndex(instruction =>
@@ -77,14 +137,14 @@ public class TrampolinePatcherTests
             });
 
             var offsetInstructions = instructionCollection.ToList()[startOffset..];
-            
-            
+
+
             var endOffset = offsetInstructions.ToList().FindIndex(instruction =>
             {
                 return instruction.OpCode == CilOpCodes.Stloc || instruction.OpCode == CilOpCodes.Stloc_0;
             });
 
-            return offsetInstructions[..(endOffset+1)];
+            return offsetInstructions[..(endOffset + 1)];
         }
 
         public IEnumerable<CilInstruction> Modified()
@@ -98,16 +158,16 @@ public class TrampolinePatcherTests
         {
             var instructions = _methodBody.Instructions;
             var matched = WrongFindInstructions(instructions);
-            var trampolineModSignature = _trampolineType.ToTypeSignature(); 
+            var trampolineModSignature = _trampolineType.ToTypeSignature();
             var trampolineInstanceMethod = _trampolineType.Methods.FirstOrDefault(it => it.Name == "get_Instance");
-            
+
             var memberReference = trampolineInstanceMethod;
 
             var methodRef = _assemblyDefinition.ManifestModule.DefaultImporter.ImportMethod(memberReference);
             var info = new TrampolineCilInfo(matched, Modified(), methodRef, trampolineModSignature);
-            
+
             TrampolinePatcherV2.AddTrampoline(_methodBody, info);
-            
+
             var formatter = new CilInstructionFormatter();
             _methodBody.Instructions.CalculateOffsets();
             foreach (CilInstruction _instruction in _methodBody.Instructions)
@@ -115,10 +175,7 @@ public class TrampolinePatcherTests
 
             _methodBody.VerifyLabels();
 
-            Assert.Throws<StackImbalanceException>(() =>
-            {
-                _methodBody.ComputeMaxStack();
-            });
+            Assert.Throws<StackImbalanceException>(() => { _methodBody.ComputeMaxStack(); });
         }
 
         [Test]
@@ -126,22 +183,22 @@ public class TrampolinePatcherTests
         {
             var instructions = _methodBody.Instructions;
             var matched = CorrectFindInstructions(instructions);
-            var trampolineModSignature = _trampolineType.ToTypeSignature(); 
+            var trampolineModSignature = _trampolineType.ToTypeSignature();
             var trampolineInstanceMethod = _trampolineType.Methods.FirstOrDefault(it => it.Name == "get_Instance");
 
             var memberReference = trampolineInstanceMethod;
 
             var methodRef = _assemblyDefinition.ManifestModule.DefaultImporter.ImportMethod(memberReference);
             var info = new TrampolineCilInfo(matched, Modified(), methodRef, trampolineModSignature);
-            
+
             TrampolinePatcherV2.AddTrampoline(_methodBody, info);
-            
+
             var formatter = new CilInstructionFormatter();
             _methodBody.Instructions.CalculateOffsets();
             foreach (CilInstruction _instruction in _methodBody.Instructions)
                 Console.WriteLine(formatter.FormatInstruction(_instruction));
 
-            
+
             Assert.DoesNotThrow(() =>
             {
                 _methodBody.VerifyLabels();
