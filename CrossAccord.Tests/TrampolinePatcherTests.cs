@@ -93,6 +93,56 @@ public class TrampolinePatcherTests
         private TypeDefinition? _definition;
         private TypeDefinition? _trampolineType;
 
+        public class CorrectTrampoline : IAccordTrampolineBuild
+        {
+            public IEnumerable<Func<CilInstruction, CilMatch>> MatchInstructions()
+            {
+                yield return (instruction => instruction.OpCode == CilOpCodes.Newobj ? CilMatch.Start : CilMatch.None);
+                yield return (instruction =>
+                {
+                    if (instruction.OpCode != CilOpCodes.Callvirt ||
+                        instruction.Operand is not MemberReference memberReference ||
+                        memberReference.Name != "Next")
+                        return CilMatch.None;
+
+                    return CilMatch.Strict;
+                });
+                yield return (instruction => instruction.OpCode == CilOpCodes.Ldc_I4_S ? CilMatch.Strict : CilMatch.None);
+                yield return (instruction => instruction.OpCode == CilOpCodes.Rem ? CilMatch.Strict : CilMatch.None);
+                yield return (instruction => instruction.OpCode == CilOpCodes.Stloc_0 ? CilMatch.End : CilMatch.None);
+            }
+
+            public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions,
+                TypeDefinition definition, CilLocalVariable instance)
+            {
+                throw new NotImplementedException();
+            }
+        }
+        
+        public class InvalidTrampoline : IAccordTrampolineBuild
+        {
+            public IEnumerable<Func<CilInstruction, CilMatch>> MatchInstructions()
+            {
+                yield return (instruction =>
+                {
+                    if (instruction.OpCode != CilOpCodes.Callvirt ||
+                        instruction.Operand is not MemberReference memberReference ||
+                        memberReference.Name != "Next")
+                        return CilMatch.None;
+
+                    return CilMatch.Start;
+                });
+                yield return (instruction => instruction.OpCode == CilOpCodes.Ldc_I4_S ? CilMatch.Strict : CilMatch.None);
+                yield return (instruction => instruction.OpCode == CilOpCodes.Rem ? CilMatch.Strict : CilMatch.None);
+                yield return (instruction => instruction.OpCode == CilOpCodes.Stloc_0 ? CilMatch.End : CilMatch.None);
+            }
+
+            public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions,
+                TypeDefinition definition, CilLocalVariable instance)
+            {
+                throw new NotImplementedException();
+            }
+        }
 
         [SetUp]
         public void Setup2()
@@ -105,47 +155,7 @@ public class TrampolinePatcherTests
                 .FirstOrDefault(it => it.Name == "ExampleTrampolineMod");
         }
 
-        public List<CilInstruction> CorrectFindInstructions(CilInstructionCollection instructionCollection)
-        {
-            var startOffset = instructionCollection.ToList()
-                .FindIndex(instruction => instruction.OpCode == CilOpCodes.Newobj);
-
-            var offsetInstructions = instructionCollection.ToList()[startOffset..];
-
-
-            var endOffset = offsetInstructions.ToList().FindIndex(instruction =>
-            {
-                return instruction.OpCode == CilOpCodes.Stloc || instruction.OpCode == CilOpCodes.Stloc_0;
-            });
-
-            return offsetInstructions[..(endOffset + 1)];
-        }
-
-        public List<CilInstruction> WrongFindInstructions(CilInstructionCollection instructionCollection)
-        {
-            var startOffset = instructionCollection.ToList().FindIndex(instruction =>
-            {
-                var correctOpCode = instruction.OpCode == CilOpCodes.Callvirt;
-
-                if (!correctOpCode)
-                    return false;
-
-                if (instruction.Operand is not MemberReference memberReference)
-                    return false;
-
-                return memberReference.Name == "Next";
-            });
-
-            var offsetInstructions = instructionCollection.ToList()[startOffset..];
-
-
-            var endOffset = offsetInstructions.ToList().FindIndex(instruction =>
-            {
-                return instruction.OpCode == CilOpCodes.Stloc || instruction.OpCode == CilOpCodes.Stloc_0;
-            });
-
-            return offsetInstructions[..(endOffset + 1)];
-        }
+        
 
         public IEnumerable<CilInstruction> Modified()
         {
@@ -156,15 +166,18 @@ public class TrampolinePatcherTests
         [Test]
         public void ShouldThrowExceptionIfInvalidStackTrampoline()
         {
-            var instructions = _methodBody.Instructions;
-            var matched = WrongFindInstructions(instructions);
+            var matched = TrampolinePatcher.GetMatchedInstructions(
+                _methodBody.Instructions,
+                new InvalidTrampoline()
+            );
             var trampolineModSignature = _trampolineType.ToTypeSignature();
             var trampolineInstanceMethod = _trampolineType.Methods.FirstOrDefault(it => it.Name == "get_Instance");
 
             var memberReference = trampolineInstanceMethod;
 
             var methodRef = _assemblyDefinition.ManifestModule.DefaultImporter.ImportMethod(memberReference);
-            var info = new TrampolineCilInfo(matched, Modified(), methodRef, trampolineModSignature);
+            var variable = new CilLocalVariable(trampolineModSignature);
+            var info = new TrampolineCilInfo(matched, Modified(), methodRef, variable);
 
             TrampolinePatcher.AddTrampoline(_methodBody, info);
 
@@ -181,15 +194,19 @@ public class TrampolinePatcherTests
         [Test]
         public void ShouldTrampoline()
         {
-            var instructions = _methodBody.Instructions;
-            var matched = CorrectFindInstructions(instructions);
+            var matched = TrampolinePatcher.GetMatchedInstructions(
+                _methodBody.Instructions,
+                new CorrectTrampoline()
+            );
             var trampolineModSignature = _trampolineType.ToTypeSignature();
             var trampolineInstanceMethod = _trampolineType.Methods.FirstOrDefault(it => it.Name == "get_Instance");
 
             var memberReference = trampolineInstanceMethod;
 
             var methodRef = _assemblyDefinition.ManifestModule.DefaultImporter.ImportMethod(memberReference);
-            var info = new TrampolineCilInfo(matched, Modified(), methodRef, trampolineModSignature);
+
+            var variable = new CilLocalVariable(trampolineModSignature);
+            var info = new TrampolineCilInfo(matched, Modified(), methodRef, variable);
 
             TrampolinePatcher.AddTrampoline(_methodBody, info);
 

@@ -6,15 +6,11 @@ using AsmResolver.PE.DotNet.Cil;
 
 namespace CrossAccord.ILTrampoline.Interfaces;
 
-
-
-
 public enum CilMatch
 {
     Start,
     End,
     Strict,
-    Relaxed,
     None
 }
 

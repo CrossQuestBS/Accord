@@ -1,4 +1,5 @@
 using AsmResolver.DotNet;
+using AsmResolver.DotNet.Code.Cil;
 using AsmResolver.DotNet.Signatures;
 using AsmResolver.PE.DotNet.Cil;
 
@@ -8,10 +9,10 @@ public class TrampolineCilInfo(
     IReadOnlyList<CilInstruction> matched,
     IEnumerable<CilInstruction> modified,
     IMethodDefOrRef trampolineInstanceRef,
-    TypeSignature trampolineInstanceType)
+    CilLocalVariable trampolineInstanceVariable)
 {
     public IReadOnlyList<CilInstruction> Matched { get; } = matched;
     public IEnumerable<CilInstruction> Modified { get; } = modified;
     public IMethodDefOrRef TrampolineInstanceRef { get; } = trampolineInstanceRef;
-    public TypeSignature TrampolineInstanceType { get; } = trampolineInstanceType;
+    public CilLocalVariable TrampolineInstanceVariable { get; } = trampolineInstanceVariable;
 }
