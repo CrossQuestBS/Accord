@@ -75,7 +75,7 @@ public class TrampolinePatcherTests
         [Test]
         public void Test()
         {
-            var matches = TrampolinePatcherV2.GetMatchedInstructions(
+            var matches = TrampolinePatcher.GetMatchedInstructions(
                 _methodBody.Instructions,
                 new TestTrampoline()
             );
@@ -166,7 +166,7 @@ public class TrampolinePatcherTests
             var methodRef = _assemblyDefinition.ManifestModule.DefaultImporter.ImportMethod(memberReference);
             var info = new TrampolineCilInfo(matched, Modified(), methodRef, trampolineModSignature);
 
-            TrampolinePatcherV2.AddTrampoline(_methodBody, info);
+            TrampolinePatcher.AddTrampoline(_methodBody, info);
 
             var formatter = new CilInstructionFormatter();
             _methodBody.Instructions.CalculateOffsets();
@@ -191,7 +191,7 @@ public class TrampolinePatcherTests
             var methodRef = _assemblyDefinition.ManifestModule.DefaultImporter.ImportMethod(memberReference);
             var info = new TrampolineCilInfo(matched, Modified(), methodRef, trampolineModSignature);
 
-            TrampolinePatcherV2.AddTrampoline(_methodBody, info);
+            TrampolinePatcher.AddTrampoline(_methodBody, info);
 
             var formatter = new CilInstructionFormatter();
             _methodBody.Instructions.CalculateOffsets();

@@ -17,12 +17,9 @@ public class AssemblyGeneratorTests
     {
         _context = new RuntimeContext(
             targetRuntime: DotNetRuntimeInfo.NetStandard(2, 1));
-            
-        #if DEBUG
-            _assemblyPath = @"../../../../CrossAccord.TestCases/bin/Debug/netstandard2.1/CrossAccord.TestCases.dll";
-        #else
-            _assemblyPath = @"../../../../CrossAccord.TestCases/bin/Release/netstandard2.1/CrossAccord.TestCases.dll";
-        #endif
+        
+        _assemblyPath = @"../../../../CrossAccord.TestCases/bin/Release/netstandard2.1/CrossAccord.TestCases.dll";
+        
         var assembly = AssemblyDefinition.FromFile(_assemblyPath, createRuntimeContext: false);
         
         _context.AddAssembly(assembly);
