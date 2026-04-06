@@ -17,5 +17,5 @@ public enum CilMatch
 public interface IAccordTrampolineBuild
 {
     public IEnumerable<Func<CilInstruction, CilMatch>> MatchInstructions();
-    public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions, TypeDefinition definition, CilLocalVariable instance);
+    public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions, TypeDefinition definition, CilLocalVariable instance, ReferenceImporter importer);
 }

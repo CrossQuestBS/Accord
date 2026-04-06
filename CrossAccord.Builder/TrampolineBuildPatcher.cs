@@ -1,16 +1,17 @@
 using System.Reflection;
+using AsmResolver.DotNet;
 using CrossAccord.Builder.Trampoline;
 using IPA.BuildProcess.Interfaces;
 
 namespace CrossAccord.Builder;
 
-/*public class TrampolineBuildPatcher : IPostStagingBuild
+public class TrampolineBuildPatcher : IPostStagingBuild
 {
     public int executeOrder => 1;
-    public void Execute(List<string> files, Dictionary<string, Assembly> assemblyDic)
+    public void Execute(List<string> files, Dictionary<string, Assembly> assemblyDictionary)
     {
         var assemblies = files.Where(it => it.EndsWith(".dll")).ToArray();
-
+        
         var assemblyPath = assemblies.First();
 
         var stagingPath = Path.GetDirectoryName(assemblyPath);
@@ -18,24 +19,19 @@ namespace CrossAccord.Builder;
         if (stagingPath is null)
             throw new DirectoryNotFoundException($"Could not find staging directory from {assemblyPath}");
 
+        String[] directories = {stagingPath};
+        
+        var context = new RuntimeContext(targetRuntime: DotNetRuntimeInfo.NetFramework(4, 0),
+            searchDirectories: directories);
+        
         var buildAssemblies = files.Where(it => it.EndsWith(".Build.dll")).ToArray();
-
-        var patches = TrampolinePatcher.GetAllPatches(buildAssemblies, files.ToArray());
-
-        Console.WriteLine("Running with patches!");
-
-
-        foreach (var (key, value) in patches)
-        {
-            Console.WriteLine($"Running with patches for: {key}");
-
-            foreach (var patch in value)
-            {
-                Console.WriteLine($"Method: {patch.MethodFullName}");
-                Console.WriteLine($"TrampolineType: {patch.TrampolineTypeFullName}");
-            }
-
-            TrampolinePatcher.PatchAssembly(key, value, files.ToArray(), assemblyDic);
+        
+        foreach (var assembly in buildAssemblies)
+        { 
+            context.LoadAssembly(assembly);
         }
+
+        Console.WriteLine("Starting trampoline patch!");
+        TrampolinePatcher.Patch(context, assemblyDictionary, "");
     }
-}*/
+}

@@ -58,7 +58,7 @@ public class AssemblyPatcherTests
         [Test]
         public void ShouldCreateOrigMethod()
         {
-            AssemblyPatcherV2.PatchAll(_patcherInfo, _context, "", saveAssembly: false);
+            AssemblyPatcher.PatchAll(_patcherInfo, _context, "", saveAssembly: false);
 
             foreach (var patcherInfo in _patcherInfo)
             {
@@ -91,11 +91,11 @@ public class AssemblyPatcherTests
 
             var type = FindPatchType(patch);
             
-            var methodDefinition = AssemblyPatcherV2.FindOriginalMethod(patch, type);
+            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, type);
             
-            var patched = AssemblyPatcherV2.GetGeneratedPatcher(patch, _patcherDefinition);
+            var patched = AssemblyPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
             
-            AssemblyPatcherV2.AddPatcher(_moduleDefinition, type, patched, methodDefinition);
+            AssemblyPatcher.AddPatcher(_moduleDefinition, type, patched, methodDefinition);
             
             Assert.That(type.Methods.Any(it => it.Name.ToString().StartsWith("Orig_")), Is.True);
             Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(3));
@@ -122,7 +122,7 @@ public class AssemblyPatcherTests
         {
             var patch = _invalidPatcherInfo;
             
-            var methodDefinition = AssemblyPatcherV2.GetGeneratedPatcher(patch, _patcherDefinition);
+            var methodDefinition = AssemblyPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
             Assert.That(methodDefinition, Is.Null);
         }
         
@@ -131,7 +131,7 @@ public class AssemblyPatcherTests
         {
             var patch = _patcherInfo[0];
             
-            var typeDefinition = AssemblyPatcherV2.GetGeneratedPatcher(patch, _patcherDefinition);
+            var typeDefinition = AssemblyPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
             Assert.That(typeDefinition, !Is.Null);
             Assert.That(typeDefinition.FullName.EndsWith(patch.Guid.ToClassSafeString()), Is.True);
         }
@@ -148,7 +148,7 @@ public class AssemblyPatcherTests
             var patch = _patcherInfo[0];
 
             var type = FindPatchType(patch);
-            var methodDefinition = AssemblyPatcherV2.FindOriginalMethod(patch, type);
+            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, type);
             Assert.That(methodDefinition, !Is.Null);
             Assert.That(methodDefinition.FullName, Is.EqualTo(patch.MethodFullName));
         }
@@ -159,7 +159,7 @@ public class AssemblyPatcherTests
             var patch = _invalidPatcherInfo;
             var type = FindPatchType(patch);
 
-            var methodDefinition = AssemblyPatcherV2.FindOriginalMethod(patch, type);
+            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, type);
             Assert.That(methodDefinition, Is.Null);
         }
         
@@ -168,7 +168,7 @@ public class AssemblyPatcherTests
         {
             var patch = _invalidPatcherInfo;
 
-            var methodDefinition = AssemblyPatcherV2.FindOriginalMethod(patch, null);
+            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, null);
             Assert.That(methodDefinition, Is.Null);
         }
     }

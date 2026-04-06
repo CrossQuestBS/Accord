@@ -41,7 +41,7 @@ public class AccordPatcher : IPostStagingBuild
             Console.WriteLine(patcherInfo);
         }
         
-        AssemblyPatcherV2.PatchAll(SharedState.PatcherInfos, context, stagingPath);
+        AssemblyPatcher.PatchAll(SharedState.PatcherInfos, context, stagingPath);
     }
 }
 

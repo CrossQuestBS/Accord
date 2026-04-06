@@ -1,10 +1,12 @@
 using System;
+using CrossAccord.Common.Interfaces;
 
 namespace CrossAccord.TestCases
 {
-    public class ExampleTrampolineMod
+    public class ExampleTrampolineMod : IAccordTrampolinePatch<ExampleTrampolineMod>
     {
         public static ExampleTrampolineMod Instance => new ExampleTrampolineMod();
+        public int ModifiedValue = 20;
     }
     
     public class TrampolineExampleClass
@@ -14,8 +16,8 @@ namespace CrossAccord.TestCases
             Console.WriteLine("Random function!!");
             var b = new Random();
             int randomNumber = b.Next() % 100;
-
-            Console.WriteLine("I do other stuff here!");
+            
+            Console.WriteLine($"I do other stuff here!");
             
             if (randomNumber > 49)
             {

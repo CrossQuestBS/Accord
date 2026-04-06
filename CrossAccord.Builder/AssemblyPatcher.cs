@@ -1,168 +1,203 @@
-using Mono.Cecil;
-using Mono.Cecil.Cil;
+using AsmResolver.DotNet;
+using AsmResolver.DotNet.Cloning;
+using AsmResolver.DotNet.Code.Cil;
+using AsmResolver.DotNet.Signatures;
+using AsmResolver.PE.DotNet.Cil;
+using AsmResolver.PE.DotNet.Metadata.Tables;
 
 namespace CrossAccord.Builder;
 
-public static class AssemblyPatcher
+
+
+public class AssemblyPatcher
 {
-    public static void AddPatcher(MethodDefinition patcherInstance, MethodDefinition prefix, MethodDefinition postfix, MethodDefinition originalMethod)
+    
+    
+    public class CloneListener : MemberClonerListener
     {
-        var ilProcessor = originalMethod.Body.GetILProcessor();
-
-        Dictionary<string, Instruction> nopInstructions = new();
-
-        var startInstruction = originalMethod.Body.Instructions[0];
-        var lastInstruction = originalMethod.Body.Instructions.Last();
-
-        var nopStart = ilProcessor.Create(OpCodes.Nop);
-        
-        nopInstructions["StartOriginal"] = nopStart;
-        
-        ilProcessor.InsertBefore(startInstruction, nopStart);
-        
-        var nopEnd = ilProcessor.Create(OpCodes.Nop);
-        nopInstructions["EndOriginal"] = nopEnd;
-        ilProcessor.InsertAfter(lastInstruction, nopEnd);
-        
-        VariableDefinition? returnValue = null;
-        if (originalMethod.ReturnType.MetadataType != MetadataType.Void)
-        {
-            returnValue = new VariableDefinition(originalMethod.ReturnType);
-            originalMethod.Body.Variables.Add(returnValue);
+        public override void OnClonedMethod(MethodDefinition original, MethodDefinition cloned) {
+            cloned.Name = $"Orig_{original.Name}";
         }
-        
-        
-        var parameters = originalMethod.Parameters.Count;
-
-        var methodInstanceRef = originalMethod.Module.ImportReference(patcherInstance);
-        
-        ilProcessor.InsertBefore(nopInstructions["StartOriginal"], ilProcessor.Create(OpCodes.Call, methodInstanceRef));
-        
-        if (originalMethod.HasThis)
-        {
-            ilProcessor.InsertBefore(nopInstructions["StartOriginal"], ilProcessor.Create(OpCodes.Ldarg, 0));
-        }
-        
-        for (int i = 0; i < parameters; i++)
-        {
-            ilProcessor.InsertBefore(nopInstructions["StartOriginal"],
-                originalMethod.Parameters[i].ParameterType.IsByReference
-                    ? ilProcessor.Create(OpCodes.Ldarg, i + (originalMethod.HasThis ? 1 : 0))
-                    : ilProcessor.Create(OpCodes.Ldarga, i + (originalMethod.HasThis ? 1 : 0)));
-        }
-
-        if (returnValue != null)
-        {
-            ilProcessor.InsertBefore(nopInstructions["StartOriginal"], ilProcessor.Create(OpCodes.Ldloca, returnValue));
-        }
-        
-        var prefixRef = originalMethod.Module.ImportReference(prefix);
-
-        ilProcessor.InsertBefore(nopInstructions["StartOriginal"], ilProcessor.Create(OpCodes.Callvirt, prefixRef));
-        
-        ilProcessor.InsertBefore(nopInstructions["StartOriginal"], ilProcessor.Create(OpCodes.Brfalse, nopInstructions["EndOriginal"]));
-        
-        if (originalMethod.ReturnType.MetadataType != MetadataType.Void)
-        {
-            ilProcessor.InsertBefore(nopInstructions["EndOriginal"], ilProcessor.Create(OpCodes.Stloc, returnValue));
-        }
-        
-        if (lastInstruction.OpCode == OpCodes.Ret)
-        {
-            ilProcessor.Remove(lastInstruction);
-        }
-
-        var nopPostfixEnd = ilProcessor.Create(OpCodes.Nop);
-        nopInstructions["PostfixEnd"] = nopPostfixEnd;
-        ilProcessor.InsertAfter(nopEnd, nopPostfixEnd);
-        // Handle calling original
-        
-        ilProcessor.InsertBefore(nopInstructions["PostfixEnd"], ilProcessor.Create(OpCodes.Call, methodInstanceRef));
-
-
-        if (originalMethod.HasThis)
-        {
-            
-            ilProcessor.InsertBefore(nopInstructions["PostfixEnd"], ilProcessor.Create(OpCodes.Ldarg, 0));
-        }
-        
-        for (int i = 0; i < parameters; i++)
-        {
-            ilProcessor.InsertBefore(nopInstructions["PostfixEnd"],
-                originalMethod.Parameters[i].ParameterType.IsByReference
-                    ? ilProcessor.Create(OpCodes.Ldarg, i + (originalMethod.HasThis ? 1 : 0))
-                    : ilProcessor.Create(OpCodes.Ldarga, i + (originalMethod.HasThis ? 1 : 0)));
-        }
-
-        if (returnValue != null)
-        {
-            ilProcessor.InsertBefore(nopInstructions["PostfixEnd"], ilProcessor.Create(OpCodes.Ldloca, returnValue));
-        }
-
-        var postfixRef = originalMethod.Module.ImportReference(postfix);
-
-        ilProcessor.InsertBefore(nopInstructions["PostfixEnd"], ilProcessor.Create(OpCodes.Callvirt, postfixRef));
-
-        if (originalMethod.ReturnType.MetadataType != MetadataType.Void)
-        {
-            ilProcessor.InsertBefore(nopInstructions["PostfixEnd"], ilProcessor.Create(OpCodes.Ldloc, returnValue));
-        }
-        
-        ilProcessor.InsertAfter(nopInstructions["PostfixEnd"], ilProcessor.Create(OpCodes.Ret));
     }
     
-    public static MethodDefinition? FindOriginalMethod(PatcherInfo info, AssemblyDefinition assemblyDefinition)
+    public static MethodDefinition? FindOriginalMethod(PatcherInfo info, TypeDefinition? typeDefinition)
     {
-        var method = assemblyDefinition.MainModule.Types.SelectMany(it => it.Methods).First(it => it.FullName == info.MethodFullName);
-
-        if (method is null)
-            return null;
-
-
-        return method;
+        return typeDefinition?.Methods.FirstOrDefault(it => it.FullName == info.MethodFullName);
     }
 
-    public static TypeDefinition? GetGeneratedPatcher(PatcherInfo info, AssemblyDefinition generatedAssembly)
+    public static void PatchAssembly(PatcherInfo[] patcherInfos, ModuleDefinition moduleToPatch,
+        ModuleDefinition patcherModule)
     {
-        return generatedAssembly.MainModule.Types.First(it => it.Name.EndsWith(info.Guid.ToClassSafeString()));
-    }
-
-    public static void PatchAssembly(PatcherInfo[] patcherList, AssemblyDefinition assemblyToPatch,
-        AssemblyDefinition generatedAssembly)
-    {
-        foreach (var patcherInfo in patcherList)
+        foreach (var patch in patcherInfos)
         {
-            var patcherType = GetGeneratedPatcher(patcherInfo, generatedAssembly);
-            
+            var patcherType = GetGeneratedPatcher(patch, patcherModule);
+
             if (patcherType is null)
                 continue;
-
-            var instance = patcherType.Methods.First(it => it.Name == "get_Instance");
-            var prefix = patcherType.Methods.First(it => it.Name == "Prefix");
-            var postfix = patcherType.Methods.First(it => it.Name == "Postfix");
-
-            var originalMethod = FindOriginalMethod(patcherInfo, assemblyToPatch);
+            
+            var type = moduleToPatch?.GetAllTypes()
+                .FirstOrDefault(type => type.FullName == patch.TypeFullName);
+            
+            if (type is null)
+                continue;
+            
+            var originalMethod = FindOriginalMethod(patch, type);
             
             if (originalMethod is null)
                 continue;
-
-            AddPatcher(instance, prefix, postfix, originalMethod);
+            
+            AddPatcher(moduleToPatch, type, patcherType, originalMethod);
         }
     }
 
-    public static void PatchAll(PatcherInfo[] patchers, string generatedPath, string assemblyParentPath)
+    public static void PatchAll(PatcherInfo[] patchers, RuntimeContext context, string outputPath, bool saveAssembly = true)
     {
         var patcherGroupedByAssemblyPath = patchers.GroupBy(it => it.AssemblyName);
 
-        foreach (var grouping in patcherGroupedByAssemblyPath)
-        {
-            AssemblyHelper.InitializeResolver(assemblyParentPath, Array.Empty<string>());
+        var assemblies = context.GetLoadedAssemblies();
+        var generatedPatchAssembly = assemblies.FirstOrDefault(it => it.Name.ToString() == "CrossAccord.Generated");
 
-            using var assembly = AssemblyHelper.ReadAssemblyInMemory(Path.Join(assemblyParentPath, grouping.Key));
-            using var generatedAssembly = AssemblyHelper.ReadAssemblyInMemory(generatedPath);
+        if (generatedPatchAssembly is null)
+            throw new Exception("Generated patch is null");
+        
+        foreach (var groupPatches in patcherGroupedByAssemblyPath)
+        {
+            var assembly = assemblies.FirstOrDefault(it => it.Name.ToString() == groupPatches.Key);
+
+            if (assembly is null)
+            {
+                Console.WriteLine($"Skipping: {groupPatches.Key}");
+                continue;
+            }
             
-            PatchAssembly(grouping.ToArray(), assembly, generatedAssembly);
-            assembly.Write(Path.Join(assemblyParentPath, grouping.Key));
+            Console.WriteLine($"Trying to load assembly: {assembly.Name}");
+            
+            PatchAssembly(groupPatches.ToArray(), assembly.ManifestModule, generatedPatchAssembly.ManifestModule);
+
+            if (!saveAssembly)
+                continue;
+            
+            var path = Path.Join(outputPath, groupPatches.Key + ".dll");
+            assembly.Write(path);
         }
+    }
+    
+    
+    public static void AddPatcher(ModuleDefinition moduleDefinition, TypeDefinition typeDefinition, TypeDefinition patchedType, MethodDefinition originalMethod)
+    {
+
+        MethodDefinition patcherInstance = patchedType.Methods.FirstOrDefault(it => it.Name.ToString().Contains("get_Instance"));
+        MethodDefinition prefix = patchedType.Methods.FirstOrDefault(it => it.Name.ToString().Contains("Prefix"));
+        MethodDefinition postfix = patchedType.Methods.FirstOrDefault(it => it.Name.ToString().Contains("Postfix"));;
+        
+        var result = new MemberCloner(moduleDefinition)
+                    .Include(originalMethod)
+                    .AddListener(new CloneListener())
+                    .Clone();
+        var clonedMethod = result.GetClonedMember(originalMethod);
+        
+        typeDefinition.Methods.Add(clonedMethod);
+        
+        var methodCILBody = originalMethod.CilMethodBody;
+
+        if (methodCILBody is null)
+            throw new ArgumentException(nameof(originalMethod));
+        
+        methodCILBody.Instructions.Clear();
+        methodCILBody.ExceptionHandlers.Clear();
+        
+        CilLocalVariable? returnValue = null;
+        
+        if (originalMethod.Signature.ReturnType != moduleDefinition.CorLibTypeFactory.Void)
+        {
+            returnValue = new CilLocalVariable(originalMethod.Signature.ReturnType);
+            methodCILBody.LocalVariables.Add(returnValue);
+        }
+
+        var isInstanceMethod = originalMethod.Signature.HasThis;
+        
+        var instanceMethod = moduleDefinition.DefaultImporter.ImportMethod(patcherInstance);
+        
+        var instanceValue = CreateInstance(patcherInstance, methodCILBody, instanceMethod);
+
+        methodCILBody.Instructions.Add(CilOpCodes.Ldloc, instanceValue);
+
+        PrepareArguments(originalMethod, methodCILBody, isInstanceMethod, true, returnValue);
+        
+        var prefixMethod = moduleDefinition.DefaultImporter.ImportMethod(prefix);
+
+        methodCILBody.Instructions.Add(CilOpCodes.Callvirt, prefixMethod);
+
+            
+        var label = new CilInstructionLabel();
+        
+        methodCILBody.Instructions.Add(
+            new CilInstruction(CilOpCodes.Brfalse, label)
+        );
+        
+        if (isInstanceMethod)
+            methodCILBody.Instructions.Add(CilOpCodes.Ldarg_0);
+        
+        foreach (var parameter in originalMethod.Parameters)
+        {
+            methodCILBody.Instructions.Add(CilOpCodes.Ldarg, parameter);
+        }
+        
+        methodCILBody.Instructions.Add(CilOpCodes.Call, clonedMethod);
+
+        if (returnValue != null)
+            methodCILBody.Instructions.Add(CilOpCodes.Stloc, returnValue);
+        
+        methodCILBody.Instructions.Add(CilOpCodes.Ldloc, instanceValue);
+        
+        PrepareArguments(originalMethod, methodCILBody, isInstanceMethod,true, returnValue);
+        
+        var postfixMethod = moduleDefinition.DefaultImporter.ImportMethod(postfix);
+
+        methodCILBody.Instructions.Add(CilOpCodes.Callvirt, postfixMethod);
+
+
+        if (returnValue != null)
+        {
+            label.Instruction = methodCILBody.Instructions.Add(CilOpCodes.Ldloc, returnValue);
+            methodCILBody.Instructions.Add(CilOpCodes.Ret);
+            return;
+        }
+        
+        label.Instruction = methodCILBody.Instructions.Add(CilOpCodes.Ret);
+    }
+    
+    private static CilLocalVariable CreateInstance(MethodDefinition? patcherInstance, CilMethodBody methodCILBody,
+        IMethodDefOrRef instanceMethod)
+    {
+       
+        CilLocalVariable instanceValue = new CilLocalVariable(patcherInstance.Signature.ReturnType);
+        methodCILBody.LocalVariables.Add(instanceValue);
+        methodCILBody.Instructions.Add(CilOpCodes.Call, instanceMethod);
+        methodCILBody.Instructions.Add(CilOpCodes.Stloc, instanceValue);
+        
+        return instanceValue;
+    }
+
+    private static void PrepareArguments(MethodDefinition originalMethod, CilMethodBody methodCILBody, bool isInstanceMethod, bool withReturnValueArg = false, CilLocalVariable? returnValue = null)
+    {
+        if (isInstanceMethod)
+            methodCILBody.Instructions.Add(CilOpCodes.Ldarg_0);
+        
+        foreach (var parameter in originalMethod.Parameters)
+        {
+            var isRefType = parameter.ParameterType.ElementType == ElementType.ByRef;
+            methodCILBody.Instructions.Add(isRefType ? CilOpCodes.Ldarg : CilOpCodes.Ldarga, parameter);
+        }
+        
+        if (withReturnValueArg && returnValue != null)
+                methodCILBody.Instructions.Add(CilOpCodes.Ldloca, returnValue);
+    }
+
+
+    public static TypeDefinition? GetGeneratedPatcher(PatcherInfo patch, ModuleDefinition? moduleDefinition)
+    {
+        return moduleDefinition?.GetAllTypes()
+            .FirstOrDefault(it => it.FullName.EndsWith(patch.Guid.ToClassSafeString()));
     }
 }

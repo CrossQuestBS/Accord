@@ -1,7 +1,9 @@
+using System.Reflection;
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
 using AsmResolver.DotNet.Serialized;
 using AsmResolver.PE.DotNet.Cil;
+using CrossAccord.Builder;
 using CrossAccord.Builder.Trampoline;
 using CrossAccord.ILTrampoline.Interfaces;
 
@@ -48,10 +50,47 @@ public class TrampolinePatcherTests
         }
 
         public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions,
-            TypeDefinition definition, CilLocalVariable instance)
+            TypeDefinition definition, CilLocalVariable instance, ReferenceImporter importer)
         {
             throw new NotImplementedException();
         }
+    }
+
+    [TestFixture]
+    public class Patch : TrampolinePatcherTests
+    {
+        private CilMethodBody? _methodBody;
+        private TypeDefinition? _definition;
+        private TypeDefinition? _trampolineType;
+        
+        [SetUp]
+        public void FixtureSetup()
+        {
+            List<string> searchDirectories = [
+                "../../../../CrossAccord.TestCases.Build/bin/Release/netstandard2.1",
+                "../../../../CrossAccord.TestCases/bin/Release/netstandard2.1",
+            ];
+            _context = new RuntimeContext(
+                targetRuntime: DotNetRuntimeInfo.NetStandard(2, 1),
+                searchDirectories: searchDirectories);
+
+            _assemblyPath = @"../../../../CrossAccord.TestCases.Build/bin/Release/netstandard2.1/CrossAccord.TestCases.Build.dll";
+            var assembly = AssemblyDefinition.FromFile(_assemblyPath, createRuntimeContext: false);
+            _context.AddAssembly(assembly);
+            _assemblyDefinition = assembly;
+        }
+
+        [Test]
+        public void Test()
+        {
+            var loadAssembly = Assembly.LoadFrom(_assemblyPath);
+
+            Dictionary<string, Assembly> dictionary = new () { };
+            dictionary.Add(Path.GetFileName(loadAssembly.Location), loadAssembly);
+            
+            TrampolinePatcher.Patch(_context, dictionary);
+        }
+ 
     }
 
     [TestFixture]
@@ -113,7 +152,7 @@ public class TrampolinePatcherTests
             }
 
             public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions,
-                TypeDefinition definition, CilLocalVariable instance)
+                TypeDefinition definition, CilLocalVariable instance, ReferenceImporter importer)
             {
                 throw new NotImplementedException();
             }
@@ -138,7 +177,7 @@ public class TrampolinePatcherTests
             }
 
             public IEnumerable<CilInstruction> PatchTrampoline(IEnumerable<CilInstruction> instructions,
-                TypeDefinition definition, CilLocalVariable instance)
+                TypeDefinition definition, CilLocalVariable instance, ReferenceImporter importer)
             {
                 throw new NotImplementedException();
             }

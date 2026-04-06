@@ -1,6 +1,8 @@
 using System.Reflection;
+using AsmResolver;
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
+using AsmResolver.DotNet.Serialized;
 using AsmResolver.DotNet.Signatures;
 using AsmResolver.PE.DotNet.Cil;
 using CrossAccord.ILTrampoline.Interfaces;
@@ -15,6 +17,7 @@ public static class TrampolinePatcher
         using var matchStart = trampoline.MatchInstructions().GetEnumerator();
 
         List<List<CilMatchResult>> matches = new();
+        
 
         while (matchStart.MoveNext())
         {
@@ -50,10 +53,11 @@ public static class TrampolinePatcher
             for (int i = 1; i < matches.Count; i++)
             {
                 var currentMatch = matches[i];
-
+                
                 var nextMatch = currentMatch.FirstOrDefault(it => it.Index == firstMatch.Index + i);
+
                 if (nextMatch is null)
-                    continue;
+                    break;
 
                 switch (nextMatch.Match)
                 {
@@ -66,6 +70,8 @@ public static class TrampolinePatcher
                 }
 
                 count++;
+                if (count == matches.Count)
+                    break;
             }
 
             if (count != matches.Count) continue;
@@ -76,35 +82,150 @@ public static class TrampolinePatcher
         return foundMatch ? instructions.ToArray()[startIndex..(endIndex + 1)] : null;
     }
 
-    public static IAccordTrampolineBuild? GetInstance(Assembly assembly, string typeName)
+   
+    private static CustomAttribute? GetPatchAttribute(TypeDefinition typeDefinition)
     {
-        var type = assembly.GetType(typeName);
-        
-        if (type is null)
-        {
+        if (!typeDefinition.HasCustomAttributes)
             return null;
-        }
+        
+        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordTrampolineBuildAttribute");
+    }
 
-        return (IAccordTrampolineBuild)Activator.CreateInstance(type);
+
+    public class PatchInfo(MethodDefinition patchMethodDefinition, TypeDefinition trampolineBuildType, TypeDefinition trampolineInstanceType)
+    {
+        public MethodDefinition PatchMethodDefinition = patchMethodDefinition;
+        public TypeDefinition TrampolineBuildType = trampolineBuildType;
+        public TypeDefinition TrampolineInstanceType = trampolineInstanceType;
     }
     
     
-
-    public static TrampolineCilInfo? GetInfo(Assembly assembly, CilMethodBody methodBody, TypeDefinition typeDefinition, IMethodDefOrRef methodDefOrRef)
+    public static void Patch(RuntimeContext context, Dictionary<string, Assembly> reflectionAssemblies, string fileSuffix = "_modified")
     {
-        var instance = GetInstance(assembly, "Todo");
+        Dictionary<AssemblyDefinition, List<PatchInfo>> allPatches = new ();
+        foreach (var assembly in context.GetLoadedAssemblies())
+        {
+            foreach (var patchType in assembly.ManifestModule.GetAllTypes())
+            {
+                var attribute = GetPatchAttribute(patchType);
+                
+                if (attribute is null)
+                    continue;
+
+
+                var type = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[0].Element;
+                var methodName = (Utf8String)attribute.Signature.FixedArguments[1].Element;
+                var arguments = (List<object>)attribute.Signature.FixedArguments[2].Elements;
+                var typeMod = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[3].Element;
+
+
+                if (!type.TryResolve(context, out var toPatchType))
+                {
+                    Console.WriteLine("Failed to get toPatchType");
+                    continue;
+                }
+
+                if (!typeMod.TryResolve(context, out var trampolineModType))
+                {
+                    Console.WriteLine("Failed to get trampolineModType");
+                    continue;
+                }
+
+                var method = AssemblyGenerator.GetMethodFromNameAndArguments(toPatchType.Methods.ToList(), methodName, arguments);
+
+                if (method is null)
+                {
+                    Console.WriteLine($"Failed to find method {methodName.Value}");
+                    continue;
+                }
+                
+                
+                List<PatchInfo> currentPatches = null;
+                
+                var patchInfo = new PatchInfo(method, patchType, trampolineModType);
+                
+                if (!allPatches.TryGetValue(toPatchType.DeclaringModule.Assembly, out currentPatches))
+                {
+                    allPatches.Add(toPatchType.DeclaringModule.Assembly, [patchInfo]);
+                }
+                else
+                    currentPatches.Add(patchInfo);
+            }
+        }
+        Console.WriteLine("Am here! 1");
+
+
+        foreach (var (assemblyDefinition, patches) in allPatches)
+        {
+            Console.WriteLine("Am here! 3");
+            
+            foreach (var patch in patches)
+            {
+                var fullPath = Path.GetFullPath(patch.TrampolineBuildType.DeclaringModule.FilePath);
+            
+                Console.WriteLine("Am here! 2");
+
+                var assemblyFile = Path.GetFileName(fullPath);
+
+                if (!reflectionAssemblies.TryGetValue(assemblyFile, out var reflectionAssembly))
+                {
+                    Console.WriteLine(reflectionAssemblies.Keys);
+                    Console.WriteLine(fullPath);
+                    throw new Exception("Failed to get reflection assembly!");
+                }
+                
+                
+                Console.WriteLine($"Running patch on: {patch.PatchMethodDefinition.FullName}");
+                var defaultImporter = patch.PatchMethodDefinition.DeclaringModule.DefaultImporter;
+
+                var getInstance =
+                    defaultImporter.ImportMethod(
+                        patch.TrampolineInstanceType.Methods.FirstOrDefault(it => it.Name == "get_Instance"));
+
+                var patchedCil = RunPatch(reflectionAssembly, defaultImporter, patch.PatchMethodDefinition.CilMethodBody,
+                    patch.TrampolineBuildType, patch.TrampolineInstanceType, getInstance);
+                AddTrampoline(patch.PatchMethodDefinition.CilMethodBody, patchedCil);
+                
+                patch.PatchMethodDefinition.CilMethodBody.Instructions.OptimizeMacros();
+            }
+
+            var output = Path.Join(Path.GetDirectoryName(assemblyDefinition.ManifestModule.FilePath),
+                Path.GetFileNameWithoutExtension(assemblyDefinition.ManifestModule.FilePath) + $"{fileSuffix}.dll");
+            
+            Console.WriteLine($"Writing patch for: {output}");
+            assemblyDefinition.Write(output);
+        }
+    }
+    
+    public static TrampolineCilInfo? RunPatch(Assembly assembly, ReferenceImporter importer, CilMethodBody? methodBody, TypeDefinition buildType, TypeDefinition modType, IMethodDefOrRef methodDefOrRef)
+    {
+        var  types = assembly.GetTypes();
+        var type = types.FirstOrDefault(it => it.Name == buildType.Name.Value && it.Namespace == buildType.Namespace.Value);
+        var instance = (IAccordTrampolineBuild)Activator.CreateInstance(type);
 
         if (instance is null)
+        {
+            Console.WriteLine($"Failed to get Instance of type {type}");
             return null;
+        }
+
+        if (methodBody is null)
+        {
+            Console.WriteLine($"Methodbody is null!");
+            return null;
+        }
         
         var matchedInstructions = GetMatchedInstructions(methodBody.Instructions, instance);
 
         if (matchedInstructions is null)
+        {
+            Console.WriteLine($"Failed to get matchedInstructions of type {type}");
             return null;
+        }
 
-        var localVariable = new CilLocalVariable(typeDefinition.ToTypeSignature());
+        var localVariable = new CilLocalVariable(modType.ToTypeSignature());
 
-        var modified = instance.PatchTrampoline(matchedInstructions,typeDefinition,localVariable);
+        var modified = instance.PatchTrampoline(matchedInstructions,modType,localVariable, importer);
 
         return new TrampolineCilInfo(matchedInstructions, modified, methodDefOrRef, localVariable);
     }
