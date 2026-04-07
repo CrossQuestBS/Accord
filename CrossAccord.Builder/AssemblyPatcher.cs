@@ -186,7 +186,7 @@ public class AssemblyPatcher
         
         foreach (var parameter in originalMethod.Parameters)
         {
-            var isRefType = parameter.ParameterType.ElementType == ElementType.ByRef;
+            var isRefType = parameter.ParameterType.ElementType == ElementType.ByRef || parameter.Definition.IsIn || parameter.Definition.IsOut;
             methodCILBody.Instructions.Add(isRefType ? CilOpCodes.Ldarg : CilOpCodes.Ldarga, parameter);
         }
         

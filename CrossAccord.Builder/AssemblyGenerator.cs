@@ -145,8 +145,8 @@ public class AssemblyGenerator
         if (methodDefinition.Parameters.Count > 0)
         {
             
-            simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "" : "ref")} arg{idx + 1}").ToArray());
-            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"{(it.Definition.IsIn ? "in" : "ref")} global::{Replace(it)} arg{idx+1}").ToArray());
+            simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"ref arg{idx + 1}").ToArray());
+            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"ref global::{Replace(it)} arg{idx+1}").ToArray());
         }
 
         if (methodDefinition.Signature.ReturnType.Name != "Void")

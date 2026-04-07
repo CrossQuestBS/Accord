@@ -62,6 +62,29 @@ public class TrampolinePatcherTests
         private CilMethodBody? _methodBody;
         private TypeDefinition? _definition;
         private TypeDefinition? _trampolineType;
+
+
+        public void OrigTest(ref string a)
+        {
+            a = "What!";
+        }
+        public void Test(string a)
+        {
+            if (PrefixTest(ref a))
+            {
+                OrigTest(ref a);
+                PostfixTest(ref a);
+            }
+        }
+        public bool PrefixTest(ref string a)
+        {
+            Console.WriteLine($"Prefix: {a}");
+            return true;
+        }
+        public void PostfixTest(ref string a)
+        {
+            Console.WriteLine($"Postfix: {a}");
+        }
         
         [SetUp]
         public void FixtureSetup()
@@ -83,6 +106,7 @@ public class TrampolinePatcherTests
         [Test]
         public void Test()
         {
+            Test("Hello");
             var loadAssembly = Assembly.LoadFrom(_assemblyPath);
 
             Dictionary<string, Assembly> dictionary = new () { };
@@ -119,6 +143,8 @@ public class TrampolinePatcherTests
                 new TestTrampoline()
             );
 
+            
+            
             Assert.That(matches.Length, Is.EqualTo(5));
             Assert.That(matches[0].OpCode, Is.EqualTo(CilOpCodes.Newobj));
             Assert.That(matches[^1].OpCode, Is.EqualTo(CilOpCodes.Stloc_0));

@@ -79,7 +79,7 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
 
                 if (parameterSymbol.RefKind == RefKind.In)
                 {
-                    currParameter += "in ";
+                    currParameter += "ref ";
                 }
                 else
                 {
