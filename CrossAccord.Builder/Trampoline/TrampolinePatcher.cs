@@ -4,6 +4,8 @@ using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
 using AsmResolver.DotNet.Signatures;
 using AsmResolver.PE.DotNet.Cil;
+using CrossAccord.Builder.Detour;
+using CrossAccord.Builder.Extensions;
 using CrossAccord.ILTrampoline.Interfaces;
 
 namespace CrossAccord.Builder.Trampoline;
@@ -136,7 +138,7 @@ public static class TrampolinePatcher
                     continue;
                 }
 
-                var method = AssemblyGenerator.GetMethodFromNameAndArguments(toPatchType.Methods.ToList(), methodName, arguments);
+                var method = DetourGenerator.GetMethodFromNameAndArguments(toPatchType.Methods.ToList(), methodName, arguments);
 
                 if (method is null)
                 {

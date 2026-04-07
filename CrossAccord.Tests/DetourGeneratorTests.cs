@@ -2,11 +2,12 @@
 using AsmResolver;
 using AsmResolver.DotNet;
 using CrossAccord.Builder;
+using CrossAccord.Builder.Detour;
 using CrossAccord.Common.Attributes;
 
 namespace CrossAccord.Tests;
 
-public class AssemblyGeneratorTests
+public class DetourGeneratorTests
 {
     private RuntimeContext _context;
     private string _assemblyPath;
@@ -26,21 +27,21 @@ public class AssemblyGeneratorTests
     }
 
     [TestFixture]
-    public class GeneratePatcherAssembly : AssemblyGeneratorTests
+    public class GeneratePatcherDetour : DetourGeneratorTests
     {
-        private PatcherInfo[] _patcherInfos;
+        private DetourPatchInfo[] _patcherInfos;
         
         [SetUp]
         public void Setup2()
         {
-            _patcherInfos = AssemblyGenerator.GetPatches(_context);
+            _patcherInfos = DetourGenerator.GetPatches(_context);
         }
 
         [Test]
         public void ShouldGenerateValidAssembly()
         {
             var memoryStream = new MemoryStream();
-            AssemblyGenerator.GeneratePatcherAssembly(_patcherInfos, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
+            DetourGenerator.GeneratePatcherAssembly(_patcherInfos, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
             var assembly = AssemblyDefinition.FromStream(memoryStream);
             
             Assert.That(assembly, !Is.Null);
@@ -49,12 +50,12 @@ public class AssemblyGeneratorTests
     }
     
     [TestFixture]
-    public class GetPatches : AssemblyGeneratorTests
+    public class GetPatches : DetourGeneratorTests
     {
         [Test]
         public void ShouldGetPatch()
         {
-            var patches = AssemblyGenerator.GetPatches(_context);
+            var patches = DetourGenerator.GetPatches(_context);
        
             Assert.That(patches.Length, Is.EqualTo(1));
 
@@ -71,7 +72,7 @@ public class AssemblyGeneratorTests
             var emptyContext = new RuntimeContext(
                 targetRuntime: DotNetRuntimeInfo.NetStandard(2, 1));
             
-            var patches = AssemblyGenerator.GetPatches(emptyContext);
+            var patches = DetourGenerator.GetPatches(emptyContext);
        
             Assert.That(patches.Length, Is.EqualTo(0));
         }

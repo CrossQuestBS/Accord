@@ -30,7 +30,7 @@ public class TrampolinePatcherTests
     }
 
 
-    public class TestTrampoline : IAccordTrampolineBuild
+    public class TestTrampolinePatcherBuild : IAccordTrampolineBuild
     {
         public IEnumerable<Func<CilInstruction, CilMatch>> MatchInstructions()
         {
@@ -140,7 +140,7 @@ public class TrampolinePatcherTests
         {
             var matches = TrampolinePatcher.GetMatchedInstructions(
                 _methodBody.Instructions,
-                new TestTrampoline()
+                new TestTrampolinePatcherBuild()
             );
 
             

@@ -1,10 +1,11 @@
 ﻿using System.Reflection;
 using AsmResolver.DotNet;
+using CrossAccord.Builder.Detour;
 using IPA.BuildProcess.Interfaces;
 
-namespace CrossAccord.Builder.Staging;
+namespace CrossAccord.Builder.Builders;
 
-public class HookPatch : IPostStagingBuild
+public class DetourPatcherBuild : IPostStagingBuild
 {
     public int executeOrder => 2;
     public void Execute(List<string> files, Dictionary<string, Assembly> _)
@@ -24,7 +25,7 @@ public class HookPatch : IPostStagingBuild
         
         var generatedAssemblyPath = Path.Join(stagingPath, "CrossAccord.Generated.dll");
         
-        var uniqueAssemblies = SharedState.PatcherInfos.Select(it => it.AssemblyName).ToHashSet().ToArray();
+        var uniqueAssemblies = SharedState.PatchInfos.Select(it => it.AssemblyName).ToHashSet().ToArray();
 
         context.LoadAssembly(generatedAssemblyPath);
         foreach (var assembly in uniqueAssemblies)
@@ -36,12 +37,12 @@ public class HookPatch : IPostStagingBuild
                 context.LoadAssembly(path);
         }
         
-        foreach (var patcherInfo in SharedState.PatcherInfos)
+        foreach (var patcherInfo in SharedState.PatchInfos)
         {
             Console.WriteLine(patcherInfo);
         }
         
-        AssemblyPatcher.PatchAll(SharedState.PatcherInfos, context, stagingPath);
+        DetourPatcher.PatchAll(SharedState.PatchInfos, context, stagingPath);
     }
 }
 

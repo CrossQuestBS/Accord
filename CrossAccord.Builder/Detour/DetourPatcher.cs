@@ -1,15 +1,15 @@
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Cloning;
 using AsmResolver.DotNet.Code.Cil;
-using AsmResolver.DotNet.Signatures;
 using AsmResolver.PE.DotNet.Cil;
 using AsmResolver.PE.DotNet.Metadata.Tables;
+using CrossAccord.Builder.Extensions;
 
-namespace CrossAccord.Builder;
+namespace CrossAccord.Builder.Detour;
 
 
 
-public class AssemblyPatcher
+public class DetourPatcher
 {
     
     
@@ -20,12 +20,12 @@ public class AssemblyPatcher
         }
     }
     
-    public static MethodDefinition? FindOriginalMethod(PatcherInfo info, TypeDefinition? typeDefinition)
+    public static MethodDefinition? FindOriginalMethod(DetourPatchInfo info, TypeDefinition? typeDefinition)
     {
         return typeDefinition?.Methods.FirstOrDefault(it => it.FullName == info.MethodFullName);
     }
 
-    public static void PatchAssembly(PatcherInfo[] patcherInfos, ModuleDefinition moduleToPatch,
+    public static void PatchAssembly(DetourPatchInfo[] patcherInfos, ModuleDefinition moduleToPatch,
         ModuleDefinition patcherModule)
     {
         foreach (var patch in patcherInfos)
@@ -50,7 +50,7 @@ public class AssemblyPatcher
         }
     }
 
-    public static void PatchAll(PatcherInfo[] patchers, RuntimeContext context, string outputPath, bool saveAssembly = true)
+    public static void PatchAll(DetourPatchInfo[] patchers, RuntimeContext context, string outputPath, bool saveAssembly = true)
     {
         var patcherGroupedByAssemblyPath = patchers.GroupBy(it => it.AssemblyName);
 
@@ -195,7 +195,7 @@ public class AssemblyPatcher
     }
 
 
-    public static TypeDefinition? GetGeneratedPatcher(PatcherInfo patch, ModuleDefinition? moduleDefinition)
+    public static TypeDefinition? GetGeneratedPatcher(DetourPatchInfo patch, ModuleDefinition? moduleDefinition)
     {
         return moduleDefinition?.GetAllTypes()
             .FirstOrDefault(it => it.FullName.EndsWith(patch.Guid.ToClassSafeString()));

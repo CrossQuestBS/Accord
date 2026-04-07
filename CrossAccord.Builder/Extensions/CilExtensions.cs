@@ -1,7 +1,7 @@
 using AsmResolver.DotNet.Code.Cil;
 using AsmResolver.PE.DotNet.Cil;
 
-namespace CrossAccord.Builder;
+namespace CrossAccord.Builder.Extensions;
 
 public static class CilExtensions
 {

@@ -4,17 +4,18 @@ using AsmResolver.DotNet;
 using AsmResolver.DotNet.Collections;
 using AsmResolver.DotNet.Signatures;
 using Basic.Reference.Assemblies;
+using CrossAccord.Builder.Extensions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 
-namespace CrossAccord.Builder;
+namespace CrossAccord.Builder.Detour;
 
-public class AssemblyGenerator
+public class DetourGenerator
 {
-    public static PatcherInfo[] GetPatches(RuntimeContext context)
+    public static DetourPatchInfo[] GetPatches(RuntimeContext context)
     {
-        List<PatcherInfo> output = new();
+        List<DetourPatchInfo> output = new();
 
         foreach (var assembly in context.GetLoadedAssemblies())
         {
@@ -59,9 +60,9 @@ public class AssemblyGenerator
         return methodForSure;
     }
     
-    private static PatcherInfo[] GetPatchesFromModule(RuntimeContext context, ModuleDefinition moduleDefinition)
+    private static DetourPatchInfo[] GetPatchesFromModule(RuntimeContext context, ModuleDefinition moduleDefinition)
     {
-        List<PatcherInfo> output = new();
+        List<DetourPatchInfo> output = new();
         
         var patchAttributes = moduleDefinition.GetAllTypes().Select(GetPatchAttribute).Where(it => it != null);
 
@@ -104,7 +105,7 @@ public class AssemblyGenerator
             Console.WriteLine();
 
 
-            var patchInfo = new PatcherInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
+            var patchInfo = new DetourPatchInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
             
             output.Add(patchInfo);
         }
@@ -261,7 +262,7 @@ public class {generatedClassName} : IAccordPatcher
         return parameterName.Replace("&", "").Replace("+", ".").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "");
     }
 
-    public static void GeneratePatcherAssembly(PatcherInfo[] allPatchers, string[] assemblies, Stream outputStream)
+    public static void GeneratePatcherAssembly(DetourPatchInfo[] allPatchers, string[] assemblies, Stream outputStream)
     {
         var patchers = allPatchers;
         

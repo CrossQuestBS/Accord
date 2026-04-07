@@ -1,9 +1,10 @@
 using AsmResolver.DotNet;
+using CrossAccord.Builder.Detour;
 using IPA.BuildProcess.Interfaces;
 
-namespace CrossAccord.Builder.Staging;
+namespace CrossAccord.Builder.Builders;
 
-public class HookGenerator : IPreStagingBuild
+public class DetourGeneratorBuild : IPreStagingBuild
 {
     public int executeOrder => 1;
 
@@ -46,9 +47,9 @@ public class HookGenerator : IPreStagingBuild
         assembliesToReference.AddRange(beatSaberFiles);
         assembliesToReference.AddRange(unityFiles);
         
-        var patchers = AssemblyGenerator.GetPatches(context);
+        var patchers = DetourGenerator.GetPatches(context);
         
-        SharedState.PatcherInfos = patchers;
+        SharedState.PatchInfos = patchers;
 
         var outputAssemblyPath = Path.Join(Path.GetDirectoryName(libDirectoryFiles[0]), "CrossAccord.Generated.dll");
 
@@ -57,7 +58,7 @@ public class HookGenerator : IPreStagingBuild
         
         var fileStream = File.Create(outputAssemblyPath);
       
-        AssemblyGenerator.GeneratePatcherAssembly(patchers, assembliesToReference.ToArray(), fileStream);
+        DetourGenerator.GeneratePatcherAssembly(patchers, assembliesToReference.ToArray(), fileStream);
         fileStream.Close();
     }
 }

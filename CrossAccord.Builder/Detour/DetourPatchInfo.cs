@@ -2,9 +2,9 @@ using Microsoft.CodeAnalysis;
 
 namespace CrossAccord.Builder;
 
-public class PatcherInfo
+public class DetourPatchInfo
 {
-    public PatcherInfo(string assemblyName, string methodFullName, string typeFullName ,SyntaxTree generatedCode, Guid guid)
+    public DetourPatchInfo(string assemblyName, string methodFullName, string typeFullName ,SyntaxTree generatedCode, Guid guid)
     {
         AssemblyName = assemblyName;
         TypeFullName = typeFullName;

@@ -1,19 +1,21 @@
 ﻿using AsmResolver;
 using AsmResolver.DotNet;
 using CrossAccord.Builder;
+using CrossAccord.Builder.Detour;
+using CrossAccord.Builder.Extensions;
 
 namespace CrossAccord.Tests;
 
-public class AssemblyPatcherTests
+public class DetourPatcherTests
 {
     private RuntimeContext _context;
-    private PatcherInfo[] _patcherInfo;
+    private DetourPatchInfo[] _patcherInfo;
     private ModuleDefinition? _moduleDefinition;
-    private readonly PatcherInfo _invalidPatcherInfo = new ("", "", "", null, new Guid());
+    private readonly DetourPatchInfo _invalidDetourPatchInfo = new ("", "", "", null, new Guid());
 
     private string _assemblyPath;
     
-    private TypeDefinition? FindPatchType(PatcherInfo patch)
+    private TypeDefinition? FindPatchType(DetourPatchInfo patch)
     {
         var type = _moduleDefinition?.GetAllTypes()
             .FirstOrDefault(type => type.FullName == patch.TypeFullName);
@@ -37,10 +39,10 @@ public class AssemblyPatcherTests
 
         _moduleDefinition = assembly.ManifestModule ?? null;
 
-        _patcherInfo = AssemblyGenerator.GetPatches(_context);
+        _patcherInfo = DetourGenerator.GetPatches(_context);
     }
 
-    public class PatchAll : AssemblyPatcherTests
+    public class PatchAll : DetourPatcherTests
     {
         private ModuleDefinition _patcherDefinition;
 
@@ -48,7 +50,7 @@ public class AssemblyPatcherTests
         public void SetupGeneratedPatcher()
         {
             var memoryStream = new MemoryStream();
-            AssemblyGenerator.GeneratePatcherAssembly(_patcherInfo, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
+            DetourGenerator.GeneratePatcherAssembly(_patcherInfo, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
             var assembly = AssemblyDefinition.FromStream(memoryStream, createRuntimeContext: false);
             _patcherDefinition = assembly.ManifestModule;
             _context.AddAssembly(assembly);
@@ -58,7 +60,7 @@ public class AssemblyPatcherTests
         [Test]
         public void ShouldCreateOrigMethod()
         {
-            AssemblyPatcher.PatchAll(_patcherInfo, _context, "", saveAssembly: false);
+            DetourPatcher.PatchAll(_patcherInfo, _context, "", saveAssembly: false);
 
             foreach (var patcherInfo in _patcherInfo)
             {
@@ -71,7 +73,7 @@ public class AssemblyPatcherTests
     }
 
     [TestFixture]
-    public class AddPatch : AssemblyPatcherTests
+    public class AddPatch : DetourPatcherTests
     {
         private ModuleDefinition _patcherDefinition;
 
@@ -79,7 +81,7 @@ public class AssemblyPatcherTests
         public void SetupGeneratedPatcher()
         {
             var memoryStream = new MemoryStream();
-            AssemblyGenerator.GeneratePatcherAssembly(_patcherInfo, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
+            DetourGenerator.GeneratePatcherAssembly(_patcherInfo, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
             var assembly = AssemblyDefinition.FromStream(memoryStream);
             _patcherDefinition = assembly.ManifestModule;
         }
@@ -91,11 +93,11 @@ public class AssemblyPatcherTests
 
             var type = FindPatchType(patch);
             
-            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, type);
+            var methodDefinition = DetourPatcher.FindOriginalMethod(patch, type);
             
-            var patched = AssemblyPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
+            var patched = DetourPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
             
-            AssemblyPatcher.AddPatcher(_moduleDefinition, type, patched, methodDefinition);
+            DetourPatcher.AddPatcher(_moduleDefinition, type, patched, methodDefinition);
             
             Assert.That(type.Methods.Any(it => it.Name.ToString().StartsWith("Orig_")), Is.True);
             Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(3));
@@ -103,7 +105,7 @@ public class AssemblyPatcherTests
     }
 
     [TestFixture]
-    public class GetGeneratedPatcher : AssemblyPatcherTests
+    public class GetGeneratedPatcher : DetourPatcherTests
     {
 
         private ModuleDefinition _patcherDefinition;
@@ -112,7 +114,7 @@ public class AssemblyPatcherTests
         public void SetupGeneratedPatcher()
         {
             var memoryStream = new MemoryStream();
-            AssemblyGenerator.GeneratePatcherAssembly(_patcherInfo, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
+            DetourGenerator.GeneratePatcherAssembly(_patcherInfo, [_assemblyPath, typeof(CrossAccord.Common.Attributes.AccordPatchAttribute).Assembly.Location], memoryStream);
             var assembly = AssemblyDefinition.FromStream(memoryStream);
             _patcherDefinition = assembly.ManifestModule;
         }
@@ -120,9 +122,9 @@ public class AssemblyPatcherTests
         [Test]
         public void ShouldReturnNullWithInvalidPatcherInfo()
         {
-            var patch = _invalidPatcherInfo;
+            var patch = _invalidDetourPatchInfo;
             
-            var methodDefinition = AssemblyPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
+            var methodDefinition = DetourPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
             Assert.That(methodDefinition, Is.Null);
         }
         
@@ -131,7 +133,7 @@ public class AssemblyPatcherTests
         {
             var patch = _patcherInfo[0];
             
-            var typeDefinition = AssemblyPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
+            var typeDefinition = DetourPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
             Assert.That(typeDefinition, !Is.Null);
             Assert.That(typeDefinition.FullName.EndsWith(patch.Guid.ToClassSafeString()), Is.True);
         }
@@ -139,7 +141,7 @@ public class AssemblyPatcherTests
     }
 
     [TestFixture]
-    public class FindOriginalMethod : AssemblyPatcherTests
+    public class FindOriginalMethod : DetourPatcherTests
     {
 
         [Test]
@@ -148,7 +150,7 @@ public class AssemblyPatcherTests
             var patch = _patcherInfo[0];
 
             var type = FindPatchType(patch);
-            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, type);
+            var methodDefinition = DetourPatcher.FindOriginalMethod(patch, type);
             Assert.That(methodDefinition, !Is.Null);
             Assert.That(methodDefinition.FullName, Is.EqualTo(patch.MethodFullName));
         }
@@ -156,19 +158,19 @@ public class AssemblyPatcherTests
         [Test]
         public void ShouldReturnNullWithInvalidPatcherInfo()
         {
-            var patch = _invalidPatcherInfo;
+            var patch = _invalidDetourPatchInfo;
             var type = FindPatchType(patch);
 
-            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, type);
+            var methodDefinition = DetourPatcher.FindOriginalMethod(patch, type);
             Assert.That(methodDefinition, Is.Null);
         }
         
         [Test]
         public void ShouldReturnNullIfEmptyModule()
         {
-            var patch = _invalidPatcherInfo;
+            var patch = _invalidDetourPatchInfo;
 
-            var methodDefinition = AssemblyPatcher.FindOriginalMethod(patch, null);
+            var methodDefinition = DetourPatcher.FindOriginalMethod(patch, null);
             Assert.That(methodDefinition, Is.Null);
         }
     }
