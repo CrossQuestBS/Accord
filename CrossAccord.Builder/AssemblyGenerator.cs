@@ -33,12 +33,10 @@ public class AssemblyGenerator
     {
         var argumentsCount = arguments.Count;
 
-        //Console.WriteLine($"Trying to find method: {name.Value}");
         var methodsFound = methods.Where(it =>
             it.Parameters.Count == argumentsCount &&
             it.Name.Value == name.Value).ToList();
 
-        //Console.WriteLine($"Available methods found: {methodsFound.Count}");
         if (methodsFound.Count <= 0) return null;
 
         if (methodsFound.Count == 1)

@@ -2,7 +2,6 @@ using System.Reflection;
 using AsmResolver;
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
-using AsmResolver.DotNet.Serialized;
 using AsmResolver.DotNet.Signatures;
 using AsmResolver.PE.DotNet.Cil;
 using CrossAccord.ILTrampoline.Interfaces;
@@ -105,18 +104,24 @@ public static class TrampolinePatcher
         Dictionary<AssemblyDefinition, List<PatchInfo>> allPatches = new ();
         foreach (var assembly in context.GetLoadedAssemblies())
         {
+            if (assembly.ManifestModule is null)
+                continue;
+            
             foreach (var patchType in assembly.ManifestModule.GetAllTypes())
             {
                 var attribute = GetPatchAttribute(patchType);
                 
                 if (attribute is null)
                     continue;
+                
+                if (attribute.Signature is null)
+                    continue;
 
 
-                var type = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[0].Element;
-                var methodName = (Utf8String)attribute.Signature.FixedArguments[1].Element;
+                var type = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[0].Element!;
+                var methodName = (Utf8String)attribute.Signature.FixedArguments[1].Element!;
                 var arguments = (List<object>)attribute.Signature.FixedArguments[2].Elements;
-                var typeMod = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[3].Element;
+                var typeMod = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[3].Element!;
 
 
                 if (!type.TryResolve(context, out var toPatchType))
@@ -152,19 +157,15 @@ public static class TrampolinePatcher
                     currentPatches.Add(patchInfo);
             }
         }
-        Console.WriteLine("Am here! 1");
 
 
         foreach (var (assemblyDefinition, patches) in allPatches)
         {
-            Console.WriteLine("Am here! 3");
             
             foreach (var patch in patches)
             {
                 var fullPath = Path.GetFullPath(patch.TrampolineBuildType.DeclaringModule.FilePath);
-            
-                Console.WriteLine("Am here! 2");
-
+                
                 var assemblyFile = Path.GetFileName(fullPath);
 
                 if (!reflectionAssemblies.TryGetValue(assemblyFile, out var reflectionAssembly))
@@ -192,7 +193,6 @@ public static class TrampolinePatcher
             var output = Path.Join(Path.GetDirectoryName(assemblyDefinition.ManifestModule.FilePath),
                 Path.GetFileNameWithoutExtension(assemblyDefinition.ManifestModule.FilePath) + $"{fileSuffix}.dll");
             
-            Console.WriteLine($"Writing patch for: {output}");
             assemblyDefinition.Write(output);
         }
     }

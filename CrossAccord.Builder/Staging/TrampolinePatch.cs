@@ -3,9 +3,9 @@ using AsmResolver.DotNet;
 using CrossAccord.Builder.Trampoline;
 using IPA.BuildProcess.Interfaces;
 
-namespace CrossAccord.Builder;
+namespace CrossAccord.Builder.Staging;
 
-public class TrampolineBuildPatcher : IPostStagingBuild
+public class Trampoline : IPostStagingBuild
 {
     public int executeOrder => 1;
     public void Execute(List<string> files, Dictionary<string, Assembly> assemblyDictionary)

@@ -2,9 +2,9 @@
 using AsmResolver.DotNet;
 using IPA.BuildProcess.Interfaces;
 
-namespace CrossAccord.Builder;
+namespace CrossAccord.Builder.Staging;
 
-public class AccordPatcher : IPostStagingBuild
+public class HookPatch : IPostStagingBuild
 {
     public int executeOrder => 2;
     public void Execute(List<string> files, Dictionary<string, Assembly> _)

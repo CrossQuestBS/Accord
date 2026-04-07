@@ -1,9 +1,9 @@
 using AsmResolver.DotNet;
 using IPA.BuildProcess.Interfaces;
 
-namespace CrossAccord.Builder;
+namespace CrossAccord.Builder.Staging;
 
-public class UnityGenerator : IPreStagingBuild
+public class HookGenerator : IPreStagingBuild
 {
     public int executeOrder => 1;
 
