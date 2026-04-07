@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Accord.Common\Accord.Common.csproj" />
+        <ProjectReference Include="..\CrossAccord.Generator\Accord.Generator\Accord.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />        <ProjectReference Include="..\Accord\Accord.csproj" />
+    </ItemGroup>
+
+</Project>
