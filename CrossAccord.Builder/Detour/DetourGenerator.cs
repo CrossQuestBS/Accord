@@ -48,7 +48,6 @@ public class DetourGenerator
             var a = Enumerable.Range(0, argumentsCount)
                 .Where(i =>
                 {
-                    //Console.WriteLine($"Comarping: {it.Parameters[i].ParameterType.Name} == {((TypeSignature)arguments[i]).Name}");
                     return it.Parameters[i].ParameterType.Name == ((TypeSignature)arguments[i]).Name;
                 })
                 .ToArray();
@@ -97,13 +96,6 @@ public class DetourGenerator
 
             var guid = Guid.NewGuid();
             var code = GetSyntaxTree(methodDefinition, guid);
-            
-            Console.WriteLine(methodName);
-            Console.WriteLine(code);
-            Console.WriteLine();
-            Console.WriteLine();
-            Console.WriteLine();
-
 
             var patchInfo = new DetourPatchInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
             

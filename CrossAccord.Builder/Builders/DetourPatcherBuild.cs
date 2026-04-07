@@ -37,11 +37,6 @@ public class DetourPatcherBuild : IPostStagingBuild
                 context.LoadAssembly(path);
         }
         
-        foreach (var patcherInfo in SharedState.PatchInfos)
-        {
-            Console.WriteLine(patcherInfo);
-        }
-        
         DetourPatcher.PatchAll(SharedState.PatchInfos, context, stagingPath);
     }
 }
