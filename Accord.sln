@@ -4,7 +4,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord", "Accord\Accord.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Common", "Accord.Common\Accord.Common.csproj", "{831AB6D3-61E4-43FE-814C-CEC1F2641F06}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Generator", "CrossAccord.Generator\Accord.Generator\Accord.Generator.csproj", "{6262E7FC-9ED8-4CCC-B1E1-2C4F6D182C26}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Generator", "Accord.Generator\Accord.Generator.csproj", "{6262E7FC-9ED8-4CCC-B1E1-2C4F6D182C26}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Builder", "Accord.Builder\Accord.Builder.csproj", "{7A974B7E-14EC-4AF9-A27F-94DC69AE7E67}"
 EndProject
