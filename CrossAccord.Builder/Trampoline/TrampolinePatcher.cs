@@ -1,253 +1,284 @@
 using System.Reflection;
+using AsmResolver;
+using AsmResolver.DotNet;
+using AsmResolver.DotNet.Code.Cil;
+using AsmResolver.DotNet.Signatures;
+using AsmResolver.PE.DotNet.Cil;
+using CrossAccord.Builder.Detour;
+using CrossAccord.Builder.Extensions;
 using CrossAccord.ILTrampoline.Interfaces;
-using Mono.Cecil;
-using Mono.Cecil.Cil;
 
 namespace CrossAccord.Builder.Trampoline;
 
 public static class TrampolinePatcher
 {
-    public static void PatchAssembly(string assemblyPath, List<TrampolinePatchInfo> patches, string[] extraPaths,
-        Dictionary<string, Assembly> assembliesContext)
+    public static CilInstruction[]? GetMatchedInstructions(CilInstructionCollection instructions,
+        IAccordTrampolineBuild trampoline)
     {
-        var parentPath = Path.GetDirectoryName(assemblyPath);
-        AssemblyHelper.InitializeResolver(parentPath, extraPaths);
-        var assembly = AssemblyHelper.ReadAssemblyInMemory(assemblyPath);
+        using var matchStart = trampoline.MatchInstructions().GetEnumerator();
 
-        var patchesByMethodName = patches.GroupBy(it => it.MethodFullName);
+        List<List<CilMatchResult>> matches = new();
+        
 
-        foreach (var group in patchesByMethodName)
+        while (matchStart.MoveNext())
         {
-            var methodFullName = group.Key;
-            var patchType = assembly.MainModule.Types.First(it => it.Methods.Any(it => it.FullName == methodFullName));
-            var patchMethod = patchType.Methods.First(it => it.FullName == methodFullName);
+            List<CilMatchResult> currentMatches = new();
 
-            var ilProcessor = patchMethod.Body.GetILProcessor();
+            if (matchStart.Current is null)
+                break;
 
-            Dictionary<string, Instruction> Labels = new();
-
-            foreach (var patchInfo in group)
+            for (var i = 0; i < instructions.Count; i++)
             {
-                using var trampolineAssemblyDefinition =
-                    AssemblyHelper.ReadAssemblyInMemory(patchInfo.PatchAssemblyPath, false);
-
-                using var trampolineModDefinition =
-                    AssemblyHelper.ReadAssemblyInMemory(patchInfo.ModAssemblyPath, false);
-
-                if (!assembliesContext.TryGetValue(patchInfo.PatchAssemblyPath, out var trampolineAssembly))
-                    continue;
-
-                if (!GetTrampoline(trampolineAssembly, patchInfo.TrampolineTypeFullName, out var trampoline))
-                    continue;
-
-                var trampolineModType =
-                    trampolineModDefinition.MainModule.Types.First(it => it.FullName == patchInfo.ModTypeFullName);
-
-                var variableDefinition = createTrampolineModDefinition(patchType, trampolineModType);
-                patchMethod.Body.Variables.Add(variableDefinition);
-
-                var firstInstruction = patchMethod.Body.Instructions.ToList()[0];
-
-                var getInstance = trampolineModType.Methods.First(it => it.Name.Contains("get_Instance"));
-
-                var getInstanceRef = patchType.Module.ImportReference(getInstance);
-
-                #region Get Trampoline Mod Instance
-
-                var methodInstructions = new List<Instruction>
-                {
-                    ilProcessor.Create(OpCodes.Call, getInstanceRef),
-                    ilProcessor.Create(OpCodes.Stloc, variableDefinition)
-                };
-
-                foreach (var instruction in methodInstructions)
-                {
-                    ilProcessor.InsertBefore(firstInstruction, instruction);
-                }
-
-                #endregion
-
-                var instructions = patchMethod.Body.Instructions.ToArray();
-
-                #region StartOffset
-
-                var startOffset = instructions.First(trampoline.StartOffset);
-                var startOffsetIdx = Array.IndexOf(instructions, startOffset);
-
-                #endregion
-
-                var instructionsFromOffset = instructions[startOffsetIdx..];
-
-                #region EndOffset
-
-                var endOffset = instructionsFromOffset.First(trampoline.EndOffset);
-                var endOffsetIdx = Array.IndexOf(instructionsFromOffset, endOffset) + 1;
-
-                #endregion
-
-                var instructionsRange = instructionsFromOffset[..endOffsetIdx];
-
-                #region Duplicate instructions
-
-                List<Instruction> duplicateInstructions = new List<Instruction>();
-
-                foreach (var instruction in instructionsRange)
-                {
-                    var duplicate = ilProcessor.Create(OpCodes.Nop);
-
-                    duplicate.OpCode = instruction.OpCode;
-                    duplicate.Operand = instruction.Operand;
-                    duplicateInstructions.Add(duplicate);
-                }
-
-                #endregion
-
-                Instruction endPatch = !Labels.TryGetValue("EndPatch", out var patch)
-                    ? SetupEndPatch(ilProcessor, Labels, instructions[^1])
-                    : patch;
-
-                var trampolineInstructions =
-                    trampoline.PatchTrampoline(duplicateInstructions, patchType, variableDefinition).ToArray();
-
-                var goingBack = instructionsFromOffset[endOffsetIdx];
-                var startPlace = instructionsFromOffset[0];
-                var loadVariable = ilProcessor.Create(OpCodes.Ldloc, variableDefinition);
-                var branchInstruction = ilProcessor.Create(OpCodes.Brfalse, startPlace);
-                var branchBack = ilProcessor.Create(OpCodes.Br, goingBack);
-
-                ilProcessor.InsertBefore(endPatch, loadVariable);
-                ilProcessor.InsertBefore(endPatch, branchInstruction);
-
-                foreach (var instruction in trampolineInstructions)
-                {
-                    ilProcessor.InsertBefore(endPatch, instruction);
-                }
-
-                ilProcessor.InsertAfter(trampolineInstructions[^1], branchBack);
-
-                var updatedBranch = false;
-                foreach (var instruction in instructions)
-                {
-                    if (instruction.Operand is not Instruction instructionOperand) continue;
-                    if (instructionOperand.Offset == startOffset.Offset)
-                    {
-                        instruction.Operand = loadVariable;
-                        updatedBranch = true;
-                    }
-                }
-
-                if (!updatedBranch)
-                {
-                    ilProcessor.InsertBefore(instructionsFromOffset[0], ilProcessor.Create(OpCodes.Br, loadVariable));
-                }
+                var matchResult = matchStart.Current(instructions[i]);
+                if (matchResult != CilMatch.None)
+                    currentMatches.Add(new CilMatchResult(matchResult, i));
             }
+
+            matches.Add(currentMatches);
         }
 
-        assembly.Write(assemblyPath);
-    }
+        var firstMatchList = matches[0];
 
-    static Instruction SetupEndPatch(ILProcessor ilProcessor, Dictionary<string, Instruction> labels,
-        Instruction lastInstruction)
-    {
-        var startNop = ilProcessor.Create(OpCodes.Nop);
+        int startIndex = -1;
+        int endIndex = -1;
 
-        labels.Add("EndPatch", startNop);
-        ilProcessor.InsertBefore(lastInstruction, startNop);
-        ilProcessor.InsertBefore(startNop, ilProcessor.Create(OpCodes.Br, lastInstruction));
-        return startNop;
-    }
+        bool foundMatch = false;
 
-    static VariableDefinition createTrampolineModDefinition(TypeDefinition typeDefinition,
-        TypeDefinition trampolineModInstance)
-    {
-        var trampoLineModRef = typeDefinition.Module.ImportReference(trampolineModInstance);
-        return new VariableDefinition(trampoLineModRef);
-    }
-
-    private static TrampolineAttributeMono GetAttributeMono(CustomAttribute attribute)
-    {
-        var patchClassType = (TypeReference)attribute.ConstructorArguments[0].Value;
-        var patchMethod = (string)attribute.ConstructorArguments[1].Value;
-        var typeToUse = (TypeReference)attribute.ConstructorArguments[2].Value;
-
-        return new TrampolineAttributeMono(patchClassType, patchMethod, typeToUse);
-    }
-
-    static List<TypeDefinition> GetTrampolineTypes(AssemblyDefinition assemblyDefinition, string attributeName)
-    {
-        var typesWithCustomAttribute = assemblyDefinition.MainModule.Types
-            .Where(it => it.HasCustomAttributes &&
-                         it.CustomAttributes.Any(attribute => attribute.AttributeType.Name == attributeName));
-        return typesWithCustomAttribute.ToList();
-    }
-
-
-    public static Dictionary<string, List<TrampolinePatchInfo>> GetAllPatches(string[] buildAssemblies,
-        string[] allFiles)
-    {
-        Dictionary<string, List<TrampolinePatchInfo>> output =
-            new Dictionary<string, List<TrampolinePatchInfo>>();
-
-        foreach (var buildAssemblyPath in buildAssemblies)
+        foreach (var firstMatch in firstMatchList)
         {
-            var parentPath = Path.GetDirectoryName(buildAssemblyPath);
-            AssemblyHelper.InitializeResolver(parentPath, allFiles);
+            if (firstMatch.Match == CilMatch.Start)
+                startIndex = firstMatch.Index;
 
-            var buildAssemblyDefinition = AssemblyHelper.ReadAssemblyInMemory(buildAssemblyPath, false);
+            int count = 1;
 
-            var trampolineTypes = GetTrampolineTypes(buildAssemblyDefinition, "AccordTrampolineBuildAttribute");
+            for (int i = 1; i < matches.Count; i++)
+            {
+                var currentMatch = matches[i];
+                
+                var nextMatch = currentMatch.FirstOrDefault(it => it.Index == firstMatch.Index + i);
 
-            if (trampolineTypes.Count == 0)
+                if (nextMatch is null)
+                    break;
+
+                switch (nextMatch.Match)
+                {
+                    case CilMatch.Start:
+                        startIndex = nextMatch.Index;
+                        break;
+                    case CilMatch.End:
+                        endIndex = nextMatch.Index;
+                        break;
+                }
+
+                count++;
+                if (count == matches.Count)
+                    break;
+            }
+
+            if (count != matches.Count) continue;
+            foundMatch = true;
+            break;
+        }
+
+        return foundMatch ? instructions.ToArray()[startIndex..(endIndex + 1)] : null;
+    }
+
+   
+    private static CustomAttribute? GetPatchAttribute(TypeDefinition typeDefinition)
+    {
+        if (!typeDefinition.HasCustomAttributes)
+            return null;
+        
+        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordTrampolineBuildAttribute");
+    }
+
+
+    public class PatchInfo(MethodDefinition patchMethodDefinition, TypeDefinition trampolineBuildType, TypeDefinition trampolineInstanceType)
+    {
+        public MethodDefinition PatchMethodDefinition = patchMethodDefinition;
+        public TypeDefinition TrampolineBuildType = trampolineBuildType;
+        public TypeDefinition TrampolineInstanceType = trampolineInstanceType;
+    }
+    
+    
+    public static void Patch(RuntimeContext context, Dictionary<string, Assembly> reflectionAssemblies, string fileSuffix = "_modified")
+    {
+        Dictionary<AssemblyDefinition, List<PatchInfo>> allPatches = new ();
+        foreach (var assembly in context.GetLoadedAssemblies())
+        {
+            if (assembly.ManifestModule is null)
                 continue;
-
-
-            foreach (var trampolineType in trampolineTypes)
+            
+            foreach (var patchType in assembly.ManifestModule.GetAllTypes())
             {
-                var attribute =
-                    trampolineType.CustomAttributes.First(it =>
-                        it.AttributeType.Name == "AccordTrampolineBuildAttribute");
+                var attribute = GetPatchAttribute(patchType);
+                
+                if (attribute is null)
+                    continue;
+                
+                if (attribute.Signature is null)
+                    continue;
 
-                var trampolineAttribute = GetAttributeMono(attribute);
 
-                var properType = trampolineAttribute.PatchedType.Resolve();
-                var modType = trampolineAttribute.ModTrampoline.Resolve();
+                var type = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[0].Element!;
+                var methodName = (Utf8String)attribute.Signature.FixedArguments[1].Element!;
+                var arguments = (List<object>)attribute.Signature.FixedArguments[2].Elements;
+                var typeMod = (TypeDefOrRefSignature)attribute.Signature.FixedArguments[3].Element!;
 
-                var methodDefinition = properType.Methods.First(it =>
-                    it.Name == trampolineAttribute.MethodName &&
-                    it.DeclaringType.FullName == trampolineAttribute.PatchedType.FullName);
 
-                var trampolinePatch = new TrampolinePatchInfo(buildAssemblyPath, trampolineType.FullName,
-                    modType.Module.FileName, modType.FullName, methodDefinition.FullName);
-
-                var patchAssemblyPath = properType.Module.FileName;
-
-                if (output.TryGetValue(patchAssemblyPath, out var entry))
+                if (!type.TryResolve(context, out var toPatchType))
                 {
-                    entry.Add(trampolinePatch);
+                    Console.WriteLine("Failed to get toPatchType");
                     continue;
                 }
 
-                var trampolinePatchWithMethod = new List<TrampolinePatchInfo> { trampolinePatch };
-                output.Add(patchAssemblyPath, trampolinePatchWithMethod);
+                if (!typeMod.TryResolve(context, out var trampolineModType))
+                {
+                    Console.WriteLine("Failed to get trampolineModType");
+                    continue;
+                }
+
+                var method = DetourGenerator.GetMethodFromNameAndArguments(toPatchType.Methods.ToList(), methodName, arguments);
+
+                if (method is null)
+                {
+                    Console.WriteLine($"Failed to find method {methodName.Value}");
+                    continue;
+                }
+                
+                
+                List<PatchInfo> currentPatches = null;
+                
+                var patchInfo = new PatchInfo(method, patchType, trampolineModType);
+                
+                if (!allPatches.TryGetValue(toPatchType.DeclaringModule.Assembly, out currentPatches))
+                {
+                    allPatches.Add(toPatchType.DeclaringModule.Assembly, [patchInfo]);
+                }
+                else
+                    currentPatches.Add(patchInfo);
             }
         }
 
-        return output;
+
+        foreach (var (assemblyDefinition, patches) in allPatches)
+        {
+            
+            foreach (var patch in patches)
+            {
+                var fullPath = Path.GetFullPath(patch.TrampolineBuildType.DeclaringModule.FilePath);
+                
+                var assemblyFile = Path.GetFileName(fullPath);
+
+                if (!reflectionAssemblies.TryGetValue(assemblyFile, out var reflectionAssembly))
+                {
+                    Console.WriteLine(reflectionAssemblies.Keys);
+                    Console.WriteLine(fullPath);
+                    throw new Exception("Failed to get reflection assembly!");
+                }
+                
+                
+                Console.WriteLine($"Running patch on: {patch.PatchMethodDefinition.FullName}");
+                var defaultImporter = patch.PatchMethodDefinition.DeclaringModule.DefaultImporter;
+
+                var getInstance =
+                    defaultImporter.ImportMethod(
+                        patch.TrampolineInstanceType.Methods.FirstOrDefault(it => it.Name == "get_Instance"));
+
+                var patchedCil = RunPatch(reflectionAssembly, defaultImporter, patch.PatchMethodDefinition.CilMethodBody,
+                    patch.TrampolineBuildType, patch.TrampolineInstanceType, getInstance);
+                AddTrampoline(patch.PatchMethodDefinition.CilMethodBody, patchedCil);
+                
+                patch.PatchMethodDefinition.CilMethodBody.Instructions.OptimizeMacros();
+            }
+
+            var output = Path.Join(Path.GetDirectoryName(assemblyDefinition.ManifestModule.FilePath),
+                Path.GetFileNameWithoutExtension(assemblyDefinition.ManifestModule.FilePath) + $"{fileSuffix}.dll");
+            
+            assemblyDefinition.Write(output);
+        }
+    }
+    
+    public static TrampolineCilInfo? RunPatch(Assembly assembly, ReferenceImporter importer, CilMethodBody? methodBody, TypeDefinition buildType, TypeDefinition modType, IMethodDefOrRef methodDefOrRef)
+    {
+        var  types = assembly.GetTypes();
+        var type = types.FirstOrDefault(it => it.Name == buildType.Name.Value && it.Namespace == buildType.Namespace.Value);
+        var instance = (IAccordTrampolineBuild)Activator.CreateInstance(type);
+
+        if (instance is null)
+        {
+            Console.WriteLine($"Failed to get Instance of type {type}");
+            return null;
+        }
+
+        if (methodBody is null)
+        {
+            Console.WriteLine($"Methodbody is null!");
+            return null;
+        }
+        
+        var matchedInstructions = GetMatchedInstructions(methodBody.Instructions, instance);
+
+        if (matchedInstructions is null)
+        {
+            Console.WriteLine($"Failed to get matchedInstructions of type {type}");
+            return null;
+        }
+
+        var localVariable = new CilLocalVariable(modType.ToTypeSignature());
+
+        var modified = instance.PatchTrampoline(matchedInstructions,modType,localVariable, importer);
+
+        return new TrampolineCilInfo(matchedInstructions, modified, methodDefOrRef, localVariable);
+    }
+    
+    public static void AddTrampoline(CilMethodBody methodBody, TrampolineCilInfo trampolineCilInfo)
+    {
+        var instructions = methodBody.Instructions;
+        var matchedInstruction = trampolineCilInfo.Matched;
+        var matchedStart = matchedInstruction[0];
+        var matchedStartLabel = matchedStart.CreateLabel();
+        var matchedEnd = matchedInstruction[^1];
+
+        CilInstruction trampolineStart = new CilInstruction(CilOpCodes.Nop);
+        CilInstruction trampolineEnd = new CilInstruction(CilOpCodes.Nop);
+
+        instructions.InsertAfter(matchedEnd, trampolineStart);
+        instructions.InsertAfter(trampolineStart, trampolineEnd);
+
+        var trampolineStartLabel = trampolineStart.CreateLabel();
+        var trampolineEndLabel = trampolineEnd.CreateLabel();
+
+        CilInstruction jumpToTrampoline = new CilInstruction(CilOpCodes.Br, trampolineStartLabel);
+        CilInstruction jumpBackToFlow = new CilInstruction(CilOpCodes.Br, trampolineEndLabel);
+
+        instructions.InsertBefore(matchedStart, jumpToTrampoline);
+        instructions.InsertBefore(trampolineStart, jumpBackToFlow);
+
+        AddTrampolineCil(methodBody, trampolineCilInfo, matchedStartLabel, instructions, trampolineEnd,
+            trampolineCilInfo.TrampolineInstanceVariable);
     }
 
 
-    private static bool GetTrampoline(Assembly assembly, string trampolineTypeName,
-        out IAccordTrampolineBuild trampoline)
+    private static void AddTrampolineCil(CilMethodBody methodBody, TrampolineCilInfo trampolineCilInfo,
+        ICilLabel matchedStartLabel, CilInstructionCollection instructions, CilInstruction trampolineEnd,
+        CilLocalVariable trampolineInstance)
     {
-        var typeName = assembly.GetType(trampolineTypeName);
+        methodBody.LocalVariables.Add(trampolineInstance);
 
-        if (typeName is null)
+        List<CilInstruction> trampolineSetupInstructions =
+        [
+            new(CilOpCodes.Call, trampolineCilInfo.TrampolineInstanceRef),
+            new(CilOpCodes.Stloc, trampolineInstance),
+            new(CilOpCodes.Ldloc, trampolineInstance),
+            new(CilOpCodes.Brfalse, matchedStartLabel)
+        ];
+
+        trampolineSetupInstructions.AddRange(trampolineCilInfo.Modified);
+
+        foreach (var cilInstruction in trampolineSetupInstructions)
         {
-            trampoline = null;
-            return false;
+            instructions.InsertBefore(trampolineEnd, cilInstruction);
         }
-
-        trampoline = (IAccordTrampolineBuild)Activator.CreateInstance(typeName)!;
-        return true;
     }
 }

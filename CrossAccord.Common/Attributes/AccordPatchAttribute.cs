@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Reflection;
 
 namespace CrossAccord.Common.Attributes;
 
@@ -9,8 +11,9 @@ namespace CrossAccord.Common.Attributes;
 /// <param name="declaringType"></param>
 /// <param name="methodName"></param>
 [AttributeUsage(AttributeTargets.Class)]
-public class AccordPatchAttribute(Type declaringType, string methodName) : Attribute
+public class AccordPatchAttribute(Type declaringType, string methodName, Type[] arguments) : Attribute
 {
     public Type DeclaringType = declaringType;
+    public Type[] Arguments = arguments;
     public string MethodName = methodName;
 }

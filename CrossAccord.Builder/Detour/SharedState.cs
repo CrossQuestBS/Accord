@@ -4,5 +4,5 @@ namespace CrossAccord.Builder;
 
 public static class SharedState
 {
-    public static PatcherInfo[] PatcherInfos { get; set; } = {};
+    public static DetourPatchInfo[] PatchInfos { get; set; } = {};
 }
