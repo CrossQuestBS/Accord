@@ -93,7 +93,7 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
                     currParameter += parameterNamespace + ".";
                 }*/
 
-                currParameter += $"{parameterSymbol.Type.ToDisplayString().Replace("<global namespace>", "global::")} arg{i + 1}";
+                currParameter += $"{parameterSymbol.Type.ToDisplayString().Replace("<global namespace>", "global::")} {parameterSymbol.Name}";
 
                 listParameters.Add(currParameter);
             }
@@ -139,15 +139,19 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
             if (generatedAttribute.ConstructorArguments[1].Value is not string methodName)
                 continue;
 
-            List<INamedTypeSymbol>? argumentsTypes = null;
-            if (generatedAttribute.ConstructorArguments.Length > 2)
+            List<ITypeSymbol>? argumentsTypes = null;
+
+          
+            
+            if (generatedAttribute.ConstructorArguments.Length > 2 && !generatedAttribute.ConstructorArguments[2].IsNull)
             {
                 var argument3 = generatedAttribute.ConstructorArguments[2];
                 
-                argumentsTypes = new List<INamedTypeSymbol>();
+                argumentsTypes = new List<ITypeSymbol>();
                 foreach (var arguments in argument3.Values)
                 {
-                    argumentsTypes.Add((INamedTypeSymbol)arguments.Value);
+                    if (arguments.Value is ITypeSymbol typeSymbol)
+                        argumentsTypes.Add(typeSymbol);
                 } 
             }
             
@@ -168,7 +172,9 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
                     method = firstIter.First(it =>
                     {
                         var a = Enumerable.Range(0, argumentsTypes.Count)
-                            .Where(i => it.Parameters[i].Type.Name == argumentsTypes[i].Name || (it.Parameters[i].ContainingType != null && it.Parameters[i].ContainingType.Name == argumentsTypes[i].Name))
+                            .Where(i => it.Parameters[i].Type.Name == argumentsTypes[i].Name || 
+                                        (it.Parameters[i].ContainingType != null && it.Parameters[i].ContainingType.Name == argumentsTypes[i].Name) || 
+                                        (argumentsTypes[i].ToString() == it.Parameters[i].Type.ToString()))
                             .ToArray();
 
                         return a.Length == argumentsTypes.Count;
@@ -177,17 +183,30 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
             }
             catch (Exception e)
             {
-                var allPotentialArguments = patchClassSymbol.GetMembers().OfType<IMethodSymbol>()
-                    .Select(it => it.Parameters).Select(it => it.Select(a => a.Type.Name));
+                var allPotentialArguments = patchClassSymbol.GetMembers().OfType<IMethodSymbol>().Where(it => it.Name == methodName)
+                    .Select(it => it.Parameters).Select(it => it.Select(a => a.Type.ToString()));
 
                 var all = string.Join("     ",allPotentialArguments.Select(it => string.Join(",", it)));
                 
-                throw new Exception($"Wanted to find {String.Join(",", argumentsTypes.Select(it => it.Name))} Alternatives: {all}");
+                throw new Exception($"Wanted to find {String.Join(",", argumentsTypes.Select(it => it.ToString()))} Alternatives: {all}" + e.Message);
+            }
+
+            if (generatedAttribute.ConstructorArguments[2].IsNull)
+            {
+                var firstIter = patchClassSymbol.GetMembers()
+                    .OfType<IMethodSymbol>()
+                    .Where(it => it.Name == methodName).ToArray();
+
+                if (firstIter.Length > 1)
+                    throw new Exception("Arguments can't be null because multiple methods found with same name");
+
+                if (firstIter.Length == 1)
+                    method = firstIter[0];
             }
             
             if (method is null)
             {
-                throw new Exception($"Failed to find method :(");
+                throw new Exception($"Failed to find method with name {methodName}");
             }
             
             StringBuilder interfaceCode = new();

@@ -11,9 +11,9 @@ namespace Accord.Common.Attributes;
 /// <param name="declaringType"></param>
 /// <param name="methodName"></param>
 [AttributeUsage(AttributeTargets.Class)]
-public class AccordPatchAttribute(Type declaringType, string methodName, Type[] arguments) : Attribute
+public class AccordPatchAttribute(Type declaringType, string methodName, Type[]? arguments) : Attribute
 {
     public Type DeclaringType = declaringType;
-    public Type[] Arguments = arguments;
+    public Type[]? Arguments = arguments;
     public string MethodName = methodName;
 }

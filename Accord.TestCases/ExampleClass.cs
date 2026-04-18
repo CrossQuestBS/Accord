@@ -15,9 +15,19 @@ namespace Accord.TestCases
             Console.WriteLine(input);
         }
         
+        public void Specific(string input)
+        {
+            Console.WriteLine(input);
+        }
+        
         public void ExampleWithStruct(ExampleStruct? exampleStruct)
         {
             Console.WriteLine(exampleStruct.Value.what);
+        }
+        
+        public void Example(string[] supportArray)
+        {
+            Console.WriteLine(supportArray);
         }
         
         public void Example(List<string> supportGenerics)
