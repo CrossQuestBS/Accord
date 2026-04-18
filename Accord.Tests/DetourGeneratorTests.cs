@@ -54,13 +54,19 @@ public class DetourGeneratorTests
         {
             var patches = DetourGenerator.GetPatches(_context);
        
-            Assert.That(patches.Length, Is.EqualTo(1));
+            Assert.That(patches.Length, Is.EqualTo(2));
 
             var patch = patches[0];
             Assert.That(patch.AssemblyName, Is.EqualTo("Accord.TestCases"));
             Assert.That(patch.TypeFullName, Is.EqualTo("Accord.TestCases.ExampleClass"));
             Assert.That(patch.MethodFullName, Is.EqualTo("System.Void Accord.TestCases.ExampleClass::Example(System.Collections.Generic.List`1<System.String>)"));
             Assert.That(patch.GeneratedCode, !Is.Null);
+            
+            var patch2 = patches[1];
+            Assert.That(patch2.AssemblyName, Is.EqualTo("Accord.TestCases"));
+            Assert.That(patch2.TypeFullName, Is.EqualTo("Accord.TestCases.ExampleClass"));
+            Assert.That(patch2.MethodFullName, Is.EqualTo("System.Void Accord.TestCases.ExampleClass::ExampleWithStruct(System.Nullable`1<Accord.TestCases.ExampleClass+ExampleStruct>)"));
+            Assert.That(patch2.GeneratedCode, !Is.Null);
         }
         
         [Test]

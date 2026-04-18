@@ -65,7 +65,7 @@ public class DetourPatcherTests
             {
                 var type = FindPatchType(patcherInfo);
                 Assert.That(type.Methods.Any(it => it.Name.ToString().StartsWith("Orig_")), Is.True);
-                Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(3));
+                Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(5));
             }
         }
         
@@ -99,7 +99,7 @@ public class DetourPatcherTests
             DetourPatcher.AddPatcher(_moduleDefinition, type, patched, methodDefinition);
             
             Assert.That(type.Methods.Any(it => it.Name.ToString().StartsWith("Orig_")), Is.True);
-            Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(3));
+            Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(4));
         }
     }
 

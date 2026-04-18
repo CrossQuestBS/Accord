@@ -83,7 +83,6 @@ public static class TrampolinePatcher
         return foundMatch ? instructions.ToArray()[startIndex..(endIndex + 1)] : null;
     }
 
-   
     private static CustomAttribute? GetPatchAttribute(TypeDefinition typeDefinition)
     {
         if (!typeDefinition.HasCustomAttributes)
@@ -92,14 +91,12 @@ public static class TrampolinePatcher
         return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordTrampolineBuildAttribute");
     }
 
-
     public class PatchInfo(MethodDefinition patchMethodDefinition, TypeDefinition trampolineBuildType, TypeDefinition trampolineInstanceType)
     {
         public MethodDefinition PatchMethodDefinition = patchMethodDefinition;
         public TypeDefinition TrampolineBuildType = trampolineBuildType;
         public TypeDefinition TrampolineInstanceType = trampolineInstanceType;
     }
-    
     
     public static void Patch(RuntimeContext context, Dictionary<string, Assembly> reflectionAssemblies, string fileSuffix = "_modified")
     {
@@ -258,7 +255,6 @@ public static class TrampolinePatcher
         AddTrampolineCil(methodBody, trampolineCilInfo, matchedStartLabel, instructions, trampolineEnd,
             trampolineCilInfo.TrampolineInstanceVariable);
     }
-
 
     private static void AddTrampolineCil(CilMethodBody methodBody, TrampolineCilInfo trampolineCilInfo,
         ICilLabel matchedStartLabel, CilInstructionCollection instructions, CilInstruction trampolineEnd,

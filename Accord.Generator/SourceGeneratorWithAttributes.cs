@@ -142,11 +142,13 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
             List<INamedTypeSymbol>? argumentsTypes = null;
             if (generatedAttribute.ConstructorArguments.Length > 2)
             {
+                var argument3 = generatedAttribute.ConstructorArguments[2];
+                
                 argumentsTypes = new List<INamedTypeSymbol>();
-                foreach (var arguments in generatedAttribute.ConstructorArguments[2].Values)
+                foreach (var arguments in argument3.Values)
                 {
                     argumentsTypes.Add((INamedTypeSymbol)arguments.Value);
-                }
+                } 
             }
             
             var methods = patchClassSymbol.GetMembers().OfType<IMethodSymbol>().ToArray();
@@ -155,26 +157,37 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
                 continue;
 
             IMethodSymbol? method = null;
-            if (argumentsTypes is not null)
+            try
             {
-                var firstIter = patchClassSymbol.GetMembers()
-                    .OfType<IMethodSymbol>()
-                    .Where(it => it.Name == methodName && it.Parameters.Length == argumentsTypes.Count);
-
-                method = firstIter.First(it =>
+                if (argumentsTypes is not null)
                 {
-                    var a = Enumerable.Range(0, argumentsTypes.Count)
-                        .Where(i => it.Parameters[i].Type.MetadataName == argumentsTypes[i].MetadataName)
-                        .ToArray();
+                    var firstIter = patchClassSymbol.GetMembers()
+                        .OfType<IMethodSymbol>()
+                        .Where(it => it.Name == methodName && it.Parameters.Length == argumentsTypes.Count);
 
-                    return a.Length == argumentsTypes.Count;
-                });
-            } else
-                method = patchClassSymbol.GetMembers().OfType<IMethodSymbol>().FirstOrDefault(it => it.Name == methodName);
+                    method = firstIter.First(it =>
+                    {
+                        var a = Enumerable.Range(0, argumentsTypes.Count)
+                            .Where(i => it.Parameters[i].Type.Name == argumentsTypes[i].Name || (it.Parameters[i].ContainingType != null && it.Parameters[i].ContainingType.Name == argumentsTypes[i].Name))
+                            .ToArray();
 
+                        return a.Length == argumentsTypes.Count;
+                    });
+                }
+            }
+            catch (Exception e)
+            {
+                var allPotentialArguments = patchClassSymbol.GetMembers().OfType<IMethodSymbol>()
+                    .Select(it => it.Parameters).Select(it => it.Select(a => a.Type.Name));
+
+                var all = string.Join("     ",allPotentialArguments.Select(it => string.Join(",", it)));
+                
+                throw new Exception($"Wanted to find {String.Join(",", argumentsTypes.Select(it => it.Name))} Alternatives: {all}");
+            }
+            
             if (method is null)
             {
-                continue;
+                throw new Exception($"Failed to find method :(");
             }
             
             StringBuilder interfaceCode = new();

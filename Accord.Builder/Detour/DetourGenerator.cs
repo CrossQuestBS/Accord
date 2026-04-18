@@ -5,6 +5,7 @@ using AsmResolver.DotNet.Collections;
 using AsmResolver.DotNet.Signatures;
 using Basic.Reference.Assemblies;
 using Accord.Builder.Extensions;
+using AsmResolver.PE.DotNet.Metadata.Tables;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -73,6 +74,7 @@ public class DetourGenerator
             var methodName = (Utf8String)arguments[1].Element;
 
             List<Object>? typeMethodArguments = null;
+            int totalArguments = -1;
             
             if (arguments.Count == 3)
             {
@@ -113,6 +115,27 @@ public class DetourGenerator
 
         return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordPatchAttribute");
     }
+
+    private static string FormatParameter(TypeSignature parameterType)
+    {
+        if (parameterType is GenericInstanceTypeSignature genericType)
+        {
+            var output = "global::" +(genericType.GenericType.FullName).Split("`")[0];
+            output += "<";
+            foreach (var argument in genericType.TypeArguments)
+            {
+                output += FormatParameter(argument);
+            }
+
+            output += ">";
+            
+            return output;
+        }
+        else
+            return "global::" + parameterType.FullName.Replace("&", "").Replace("+", ".").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "");
+
+        return "";
+    }
     
     private static SyntaxTree GetSyntaxTree(MethodDefinition methodDefinition, Guid guid)
     { 
@@ -120,6 +143,7 @@ public class DetourGenerator
         var methodName = methodDefinition.Name.ToString();
         var generatedClassName = $"{methodName}Patcher_{guid.ToClassSafeString()}".Replace(".ctor", "Constructor");
 
+        
         var parameters = "";
 
         List<string> totalParameters = new();
@@ -135,9 +159,8 @@ public class DetourGenerator
         
         if (methodDefinition.Parameters.Count > 0)
         {
-            
             simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"ref arg{idx + 1}").ToArray());
-            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"ref global::{Replace(it)} arg{idx+1}").ToArray());
+            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"ref {FormatParameter(it.ParameterType)} arg{idx+1}").ToArray());
         }
 
         if (methodDefinition.Signature.ReturnType.Name != "Void")
@@ -147,7 +170,7 @@ public class DetourGenerator
         }
 
         var arguments =
-            String.Join(",", methodDefinition.Parameters.Select(it => $"typeof(global::{Replace(it)})"));
+            String.Join(",", methodDefinition.Parameters.Select(it => $"typeof({FormatParameter(it.ParameterType)})"));
 
         parameters = string.Join(", ", totalParameters);
         parameterSimpleValue = string.Join(", ", simpleParameters);
