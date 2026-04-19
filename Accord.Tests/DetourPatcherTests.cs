@@ -27,11 +27,8 @@ public class DetourPatcherTests
         _context = new RuntimeContext(
             targetRuntime: DotNetRuntimeInfo.NetStandard(2, 1));
             
-        #if DEBUG
-            _assemblyPath = @"../../../../Accord.TestCases/bin/Debug/netstandard2.1/Accord.TestCases.dll";
-        #else
-            _assemblyPath = @"../../../../Accord.TestCases/bin/Release/netstandard2.1/Accord.TestCases.dll";
-        #endif
+    
+        _assemblyPath = @"../../../../Accord.TestCases/bin/Release/netstandard2.1/Accord.TestCases.dll";
         var assembly = AssemblyDefinition.FromFile(_assemblyPath, createRuntimeContext: false);
         
         _context.AddAssembly(assembly);
@@ -59,7 +56,7 @@ public class DetourPatcherTests
         [Test]
         public void ShouldCreateOrigMethod()
         {
-            DetourPatcher.PatchAll(_patcherInfo, _context, "", saveAssembly: false);
+            DetourPatcher.PatchAll(_patcherInfo, _context, "../../../../Accord.TestCases/bin/Release/", saveAssembly: true);
 
             foreach (var patcherInfo in _patcherInfo)
             {
@@ -99,7 +96,7 @@ public class DetourPatcherTests
             DetourPatcher.AddPatcher(_moduleDefinition, type, patched, methodDefinition);
             
             Assert.That(type.Methods.Any(it => it.Name.ToString().StartsWith("Orig_")), Is.True);
-            Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(5));
+            Assert.That(type.Methods.Count(it => !it.IsConstructor), Is.EqualTo(7));
         }
     }
 
@@ -130,11 +127,13 @@ public class DetourPatcherTests
         [Test]
         public void ShouldReturnType()
         {
-            var patch = _patcherInfo[0];
-            
-            var typeDefinition = DetourPatcher.GetGeneratedPatcher(patch, _patcherDefinition);
-            Assert.That(typeDefinition, !Is.Null);
-            Assert.That(typeDefinition.FullName.EndsWith(patch.Guid.ToClassSafeString()), Is.True);
+
+            foreach (var patchInfo in _patcherInfo)
+            {
+                var typeDefinition = DetourPatcher.GetGeneratedPatcher(patchInfo, _patcherDefinition);
+                Assert.That(typeDefinition, !Is.Null);
+                Assert.That(typeDefinition.FullName.EndsWith(patchInfo.Guid.ToClassSafeString()), Is.True);
+            }
         }
         
     }

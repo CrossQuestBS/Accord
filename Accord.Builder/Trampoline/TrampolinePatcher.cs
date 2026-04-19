@@ -98,7 +98,7 @@ public static class TrampolinePatcher
         public TypeDefinition TrampolineInstanceType = trampolineInstanceType;
     }
     
-    public static void Patch(RuntimeContext context, Dictionary<string, Assembly> reflectionAssemblies, string fileSuffix = "_modified")
+    public static void Patch(RuntimeContext context, Dictionary<string, Assembly> reflectionAssemblies, string fileSuffix = "_modified_trampoline")
     {
         Dictionary<AssemblyDefinition, List<PatchInfo>> allPatches = new ();
         foreach (var assembly in context.GetLoadedAssemblies())
@@ -142,7 +142,6 @@ public static class TrampolinePatcher
                     Console.WriteLine($"Failed to find method {methodName.Value}");
                     continue;
                 }
-                
                 
                 List<PatchInfo> currentPatches = null;
                 

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Accord.TestCases
 {
@@ -13,6 +15,11 @@ namespace Accord.TestCases
         public void Example(string input)
         {
             Console.WriteLine(input);
+        }
+        
+        public async Task ExampleAsync(string input)
+        {
+            await Task.Delay(12);
         }
         
         public void Specific(string input)

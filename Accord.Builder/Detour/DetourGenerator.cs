@@ -5,7 +5,6 @@ using AsmResolver.DotNet.Collections;
 using AsmResolver.DotNet.Signatures;
 using Basic.Reference.Assemblies;
 using Accord.Builder.Extensions;
-using AsmResolver.PE.DotNet.Metadata.Tables;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -170,7 +169,7 @@ public class DetourGenerator
 
         if (methodDefinition.Signature.ReturnType.Name != "Void")
         {
-            totalParameters.Add($"ref global::{methodDefinition.Signature.ReturnType.FullName} returnValue");
+            totalParameters.Add($"ref {FormatParameter(methodDefinition.Signature.ReturnType)} returnValue");
             simpleParameters.Add("ref returnValue");
         }
 
