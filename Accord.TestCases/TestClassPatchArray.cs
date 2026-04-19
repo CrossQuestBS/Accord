@@ -5,9 +5,9 @@ using Accord.Common.Attributes;
 namespace Accord.TestCases
 {
     [AccordPatch(typeof(ExampleClass), nameof(ExampleClass.Example), [typeof(string[])])]
-    public partial class ExampleClassPatch4
+    public partial class ExampleClassPatchArray
     {
-        public ExampleClassPatch4()
+        public ExampleClassPatchArray()
         {
             Patch();
         }

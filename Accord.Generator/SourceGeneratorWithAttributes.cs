@@ -13,6 +13,42 @@ namespace Accord.Generator;
 [Generator]
 public class SourceGeneratorWithAttributes : IIncrementalGenerator
 {
+
+    private static string FormatParameter(ITypeSymbol typeSymbol)
+    {
+
+        var specialType = typeSymbol.SpecialType != SpecialType.None;
+
+        if (typeSymbol is IArrayTypeSymbol arrayTypeSymbol)
+        {
+            if (arrayTypeSymbol.ElementType.SpecialType != SpecialType.None)
+                return arrayTypeSymbol.ToDisplayString().Replace("<global namespace>", "");
+            
+            return "global::" + arrayTypeSymbol.ToDisplayString().Replace("<global namespace>", "");
+        }
+        
+        var displayName = typeSymbol.ToDisplayString().Replace("<global namespace>", "");
+
+        if (typeSymbol is INamedTypeSymbol parameterType && parameterType.IsGenericType && displayName.Contains("<"))
+        {
+            var output = (specialType ? "" : "global::") + parameterType.ToDisplayString().Replace("<global namespace>", "").Split('<')[0];
+            output += "<";
+
+            foreach (var argument in parameterType.TypeArguments)
+            {
+                output += FormatParameter(argument);
+            }
+
+            output += ">";
+
+            return output;
+        }
+
+        
+        
+        return (specialType ? "" : "global::")  + displayName;
+    }
+    
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         
@@ -57,14 +93,8 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
         if (!methodSymbol.IsStatic)
         {
             var instanceParameter = "";
-            var classNameSpace = classSymbol.ContainingNamespace.ToDisplayString().Replace("<global namespace>", "global::");
-        
-            if (classNameSpace.Length > 0 && classNameSpace != "global::")
-            {
-                instanceParameter += classNameSpace + ".";
-            }
 
-            instanceParameter += $"{classSymbol.Name} instance";
+            instanceParameter += $"{FormatParameter(classSymbol)} instance";
             listParameters.Add(instanceParameter);
         }
         
@@ -86,15 +116,8 @@ public class SourceGeneratorWithAttributes : IIncrementalGenerator
                     currParameter += "ref ";
                 }
                 
-                /*var parameterNamespace = parameterSymbol.Type.ContainingNamespace.ToDisplayString().Replace("<global namespace>", "global::");
-
-                if (parameterNamespace.Length > 0 && parameterNamespace != "global::")
-                {
-                    currParameter += parameterNamespace + ".";
-                }*/
-
-                currParameter += $"{parameterSymbol.Type.ToDisplayString().Replace("<global namespace>", "global::")} {parameterSymbol.Name}";
-
+                currParameter += $"{FormatParameter(parameterSymbol.Type)} {parameterSymbol.Name}";
+                
                 listParameters.Add(currParameter);
             }
         }

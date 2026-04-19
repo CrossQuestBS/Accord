@@ -74,11 +74,11 @@ public class DetourGenerator
             var methodName = (Utf8String)arguments[1].Element;
 
             List<Object>? typeMethodArguments = null;
-            int totalArguments = -1;
             
             if (arguments.Count == 3)
             {
-                typeMethodArguments = (List<Object>)arguments[2].Elements;
+                if (!arguments[2].IsNullArray)
+                    typeMethodArguments = (List<Object>)arguments[2].Elements;
             }
 
             if (!classType.TryResolve(context, out TypeDefinition definition))
@@ -91,13 +91,18 @@ public class DetourGenerator
             }
             else 
                 methodDefinition = definition.Methods.FirstOrDefault(it =>
-                it.Name == methodName && it.DeclaringType.FullName == classType.FullName);
+                it.Name == methodName);
 
             if (methodDefinition is null)
-                throw new Exception("Failed to find method!");
+                throw new Exception($"Failed to find method: {methodName} with {arguments.Count} & {typeMethodArguments}");
 
             var guid = Guid.NewGuid();
             var code = GetSyntaxTree(methodDefinition, guid);
+            
+            Console.WriteLine(methodDefinition.Name);
+            Console.WriteLine(code);
+            Console.WriteLine();
+            Console.WriteLine();
 
             var patchInfo = new DetourPatchInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
             
@@ -129,10 +134,10 @@ public class DetourGenerator
 
             output += ">";
             
-            return output;
+            return output.Trim().Replace("+", ".").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "").Replace("&", "");
         }
         else
-            return "global::" + parameterType.FullName.Replace("&", "").Replace("+", ".").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "");
+            return "global::" + parameterType.FullName.Replace("&", "").Replace("+", ".").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "").Trim();
 
         return "";
     }
@@ -293,7 +298,38 @@ public class {generatedClassName} : IAccordPatcher
         var compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
         var topLevelBinderFlagsProperty = typeof(CSharpCompilationOptions).GetProperty("TopLevelBinderFlags", BindingFlags.Instance | BindingFlags.NonPublic);
         topLevelBinderFlagsProperty.SetValue(compilationOptions, (uint)1 << 22);
-        
+
+#if DEBUG
+        foreach (var patcher in patchers)
+        {
+            Console.WriteLine($"Trying to compile for {patcher.MethodFullName} {patcher.TypeFullName} {patcher.Guid} {patcher.AssemblyName}");
+            CSharpCompilation compilation2 = CSharpCompilation.Create(
+                "Accord.Generated",
+                syntaxTrees: [patcher.GeneratedCode],
+                references: metadataReferences.ToArray(),
+                options: compilationOptions);
+      
+            using var ms2 = new MemoryStream();
+
+            EmitResult result2 = compilation2.Emit(ms2);
+
+            if (!result2.Success)
+            {
+                IEnumerable<Diagnostic> failures = result2.Diagnostics.Where(diagnostic =>
+                    diagnostic.IsWarningAsError ||
+                    diagnostic.Severity == DiagnosticSeverity.Error);
+            
+                foreach (Diagnostic diagnostic in failures)
+                {
+                    throw new Exception(string.Format("Failed to compile code '{0}'! {1}: {2}", diagnostic.AdditionalLocations, diagnostic.Id,
+                        diagnostic.GetMessage()));
+                }
+
+                throw new Exception("Unknown error while compiling code");
+            }
+        } 
+#endif
+     
         
         
         CSharpCompilation compilation = CSharpCompilation.Create(
