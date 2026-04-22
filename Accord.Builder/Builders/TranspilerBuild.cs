@@ -1,11 +1,11 @@
 using System.Reflection;
-using Accord.Builder.Trampoline;
+using Accord.Builder.Transpiler;
 using AsmResolver.DotNet;
 using IPA.BuildProcess.Interfaces;
 
 namespace Accord.Builder.Builders;
 
-public class TrampolinePatcherBuild : IPostStagingBuild
+public class TranspilerBuild : IPostStagingBuild
 {
     public int executeOrder => 1;
     public void Execute(List<string> files, Dictionary<string, Assembly> assemblyDictionary)
@@ -32,7 +32,7 @@ public class TrampolinePatcherBuild : IPostStagingBuild
             context.LoadAssembly(assembly);
         }
 
-        Console.WriteLine("Starting trampoline patch!");
-        TrampolinePatcher.Patch(context, assemblyDictionary, "");
+        Console.WriteLine("Starting transpiler build!");
+        TranspilerPatcher.Patch(context, assemblyDictionary, "");
     }
 }

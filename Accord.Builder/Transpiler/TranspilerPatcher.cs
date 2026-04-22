@@ -1,21 +1,22 @@
 using System.Reflection;
 using Accord.Builder.Detour;
 using Accord.Builder.Extensions;
-using Accord.ILTrampoline.Interfaces;
+using Accord.Transpiler.Attributes;
+using Accord.Transpiler.Interfaces;
 using AsmResolver;
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
 using AsmResolver.DotNet.Signatures;
 using AsmResolver.PE.DotNet.Cil;
 
-namespace Accord.Builder.Trampoline;
+namespace Accord.Builder.Transpiler;
 
-public static class TrampolinePatcher
+public static class TranspilerPatcher
 {
-    public static CilInstruction[]? GetMatchedInstructions(CilInstructionCollection instructions,
-        IAccordTrampolineBuild trampoline)
+    public static CilInstruction[]? GetMatchedInstructions(CilInstruction[] instructions,
+        IAccordTranspiler transpilerInstance)
     {
-        using var matchStart = trampoline.MatchInstructions().GetEnumerator();
+        using var matchStart = transpilerInstance.Match().GetEnumerator();
 
         List<List<CilMatchResult>> matches = new();
         
@@ -27,7 +28,7 @@ public static class TrampolinePatcher
             if (matchStart.Current is null)
                 break;
 
-            for (var i = 0; i < instructions.Count; i++)
+            for (var i = 0; i < instructions.Length; i++)
             {
                 var matchResult = matchStart.Current(instructions[i]);
                 if (matchResult != CilMatch.None)
@@ -88,17 +89,17 @@ public static class TrampolinePatcher
         if (!typeDefinition.HasCustomAttributes)
             return null;
         
-        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordTrampolineBuildAttribute");
+        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == nameof(AccordTranspilerBuildAttribute));
     }
 
-    public class PatchInfo(MethodDefinition patchMethodDefinition, TypeDefinition trampolineBuildType, TypeDefinition trampolineInstanceType)
+    public class PatchInfo(MethodDefinition patchMethodDefinition, TypeDefinition transpilerBuildType, TypeDefinition transpilerInstanceType)
     {
         public MethodDefinition PatchMethodDefinition = patchMethodDefinition;
-        public TypeDefinition TrampolineBuildType = trampolineBuildType;
-        public TypeDefinition TrampolineInstanceType = trampolineInstanceType;
+        public TypeDefinition TranspilerBuildType = transpilerBuildType;
+        public TypeDefinition TranspilerInstanceType = transpilerInstanceType;
     }
     
-    public static void Patch(RuntimeContext context, Dictionary<string, Assembly> reflectionAssemblies, string fileSuffix = "_modified_trampoline")
+    public static void Patch(RuntimeContext context, Dictionary<string, Assembly> reflectionAssemblies, string fileSuffix = "_modified_transpiler")
     {
         Dictionary<AssemblyDefinition, List<PatchInfo>> allPatches = new ();
         foreach (var assembly in context.GetLoadedAssemblies())
@@ -162,7 +163,7 @@ public static class TrampolinePatcher
             
             foreach (var patch in patches)
             {
-                var fullPath = Path.GetFullPath(patch.TrampolineBuildType.DeclaringModule.FilePath);
+                var fullPath = Path.GetFullPath(patch.TranspilerBuildType.DeclaringModule.FilePath);
                 
                 var assemblyFile = Path.GetFileName(fullPath);
 
@@ -179,11 +180,15 @@ public static class TrampolinePatcher
 
                 var getInstance =
                     defaultImporter.ImportMethod(
-                        patch.TrampolineInstanceType.Methods.FirstOrDefault(it => it.Name == "get_Instance"));
+                        patch.TranspilerInstanceType.Methods.FirstOrDefault(it => it.Name == "get_Instance"));
 
                 var patchedCil = RunPatch(reflectionAssembly, defaultImporter, patch.PatchMethodDefinition.CilMethodBody,
-                    patch.TrampolineBuildType, patch.TrampolineInstanceType, getInstance);
-                AddTrampoline(patch.PatchMethodDefinition.CilMethodBody, patchedCil);
+                    patch.TranspilerBuildType, patch.TranspilerInstanceType, getInstance);
+
+                foreach (var transpilerInfo in patchedCil)
+                {
+                    AddTranspiler(patch.PatchMethodDefinition.CilMethodBody, transpilerInfo);
+                }
                 
                 patch.PatchMethodDefinition.CilMethodBody.Instructions.OptimizeMacros();
             }
@@ -195,11 +200,11 @@ public static class TrampolinePatcher
         }
     }
     
-    public static TrampolineCilInfo? RunPatch(Assembly assembly, ReferenceImporter importer, CilMethodBody? methodBody, TypeDefinition buildType, TypeDefinition modType, IMethodDefOrRef methodDefOrRef)
+    public static List<TranspilerInfo>? RunPatch(Assembly assembly, ReferenceImporter importer, CilMethodBody? methodBody, TypeDefinition buildType, TypeDefinition modType, IMethodDefOrRef methodDefOrRef)
     {
         var  types = assembly.GetTypes();
         var type = types.FirstOrDefault(it => it.Name == buildType.Name.Value && it.Namespace == buildType.Namespace.Value);
-        var instance = (IAccordTrampolineBuild)Activator.CreateInstance(type);
+        var instance = (IAccordTranspilerInstance)Activator.CreateInstance(type);
 
         if (instance is null)
         {
@@ -212,26 +217,35 @@ public static class TrampolinePatcher
             Console.WriteLine($"Methodbody is null!");
             return null;
         }
-        
-        var matchedInstructions = GetMatchedInstructions(methodBody.Instructions, instance);
 
-        if (matchedInstructions is null)
+        List<TranspilerInfo> transpilerInfos = new List<TranspilerInfo>();
+        
+        // TODO: Fix this
+        int offset = 0;
+        foreach (var transpiler in instance.TranspilerList)
         {
-            Console.WriteLine($"Failed to get matchedInstructions of type {type}");
-            return null;
+            var instructions = methodBody.Instructions.ToArray()[offset..];
+            var matchedInstructions = GetMatchedInstructions(instructions, transpiler);
+
+            if (matchedInstructions is null)
+            {
+                Console.WriteLine($"Failed to get matchedInstructions of type {type}");
+                return null;
+            }
+
+
+            var modified = transpiler.Modify(matchedInstructions, modType, methodDefOrRef, importer);
+
+            transpilerInfos.Add(new TranspilerInfo(matchedInstructions, modified, methodDefOrRef));
         }
 
-        var localVariable = new CilLocalVariable(modType.ToTypeSignature());
-
-        var modified = instance.PatchTrampoline(matchedInstructions,modType,localVariable, importer);
-
-        return new TrampolineCilInfo(matchedInstructions, modified, methodDefOrRef, localVariable);
+        return transpilerInfos;
     }
     
-    public static void AddTrampoline(CilMethodBody methodBody, TrampolineCilInfo trampolineCilInfo)
+    public static void AddTranspiler(CilMethodBody methodBody, TranspilerInfo transpilerInfo)
     {
         var instructions = methodBody.Instructions;
-        var matchedInstruction = trampolineCilInfo.Matched;
+        var matchedInstruction = transpilerInfo.Matched;
         var matchedStart = matchedInstruction[0];
         var matchedStartLabel = matchedStart.CreateLabel();
         var matchedEnd = matchedInstruction[^1];
@@ -251,27 +265,21 @@ public static class TrampolinePatcher
         instructions.InsertBefore(matchedStart, jumpToTrampoline);
         instructions.InsertBefore(trampolineStart, jumpBackToFlow);
 
-        AddTrampolineCil(methodBody, trampolineCilInfo, matchedStartLabel, instructions, trampolineEnd,
-            trampolineCilInfo.TrampolineInstanceVariable);
+        AddTranspilerCil(methodBody, transpilerInfo, matchedStartLabel, instructions, trampolineEnd);
     }
 
-    private static void AddTrampolineCil(CilMethodBody methodBody, TrampolineCilInfo trampolineCilInfo,
-        ICilLabel matchedStartLabel, CilInstructionCollection instructions, CilInstruction trampolineEnd,
-        CilLocalVariable trampolineInstance)
+    private static void AddTranspilerCil(CilMethodBody methodBody, TranspilerInfo transpilerInfo,
+        ICilLabel matchedStartLabel, CilInstructionCollection instructions, CilInstruction trampolineEnd)
     {
-        methodBody.LocalVariables.Add(trampolineInstance);
-
-        List<CilInstruction> trampolineSetupInstructions =
+        List<CilInstruction> transpilerSetup =
         [
-            new(CilOpCodes.Call, trampolineCilInfo.TrampolineInstanceRef),
-            new(CilOpCodes.Stloc, trampolineInstance),
-            new(CilOpCodes.Ldloc, trampolineInstance),
+            new(CilOpCodes.Call, transpilerInfo.TranspilerInstanceRef),
             new(CilOpCodes.Brfalse, matchedStartLabel)
         ];
 
-        trampolineSetupInstructions.AddRange(trampolineCilInfo.Modified);
+        transpilerSetup.AddRange(transpilerInfo.Modified);
 
-        foreach (var cilInstruction in trampolineSetupInstructions)
+        foreach (var cilInstruction in transpilerSetup)
         {
             instructions.InsertBefore(trampolineEnd, cilInstruction);
         }

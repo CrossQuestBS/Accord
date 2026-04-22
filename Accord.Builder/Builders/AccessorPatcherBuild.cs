@@ -1,5 +1,5 @@
 using System.Reflection;
-using Accord.Builder.Trampoline;
+using Accord.Builder.Transpiler;
 using AsmResolver.DotNet;
 using IPA.BuildProcess.Interfaces;
 

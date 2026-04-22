@@ -16,6 +16,11 @@ namespace Accord.TestCases
         {
             Console.WriteLine(input);
         }
+
+        public static void ExampleStatic(string test)
+        {
+            Console.WriteLine(test);
+        }
         
         public async Task ExampleAsync(string input)
         {

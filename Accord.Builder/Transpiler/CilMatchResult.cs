@@ -1,6 +1,6 @@
-using Accord.ILTrampoline.Interfaces;
+using Accord.Transpiler.Interfaces;
 
-namespace Accord.Builder.Trampoline;
+namespace Accord.Builder.Transpiler;
 
 public class CilMatchResult(CilMatch match, int index)
 {

@@ -8,7 +8,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Generator", "Accord.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Builder", "Accord.Builder\Accord.Builder.csproj", "{7A974B7E-14EC-4AF9-A27F-94DC69AE7E67}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.ILTrampoline", "Accord.ILTrampoline\Accord.ILTrampoline.csproj", "{FB122466-AF04-4BC7-93D6-F09E8763B325}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Transpiler", "Accord.Transpiler\Accord.Transpiler.csproj", "{FB122466-AF04-4BC7-93D6-F09E8763B325}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Accord.Tests", "Accord.Tests\Accord.Tests.csproj", "{1698EB26-7A4B-4380-BAE8-B646CD2CA700}"
 EndProject

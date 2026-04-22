@@ -16,7 +16,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Accord.Common\Accord.Common.csproj" />
-      <ProjectReference Include="..\Accord.ILTrampoline\Accord.ILTrampoline.csproj" />
+      <ProjectReference Include="..\Accord.Transpiler\Accord.Transpiler.csproj" />
     </ItemGroup>
 
     <ItemGroup>

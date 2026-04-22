@@ -1,5 +1,5 @@
 using System.Reflection;
-using Accord.Builder.Trampoline;
+using Accord.Builder.Transpiler;
 using Accord.Common;
 using Accord.Common.Attributes;
 using AsmResolver.DotNet;
@@ -33,7 +33,7 @@ public class AccessorPatcherTests
         {
                 private CilMethodBody? _methodBody;
                 private TypeDefinition? _definition;
-                private TypeDefinition? _trampolineType;
+                private TypeDefinition? _transpilerInstance;
         
                 [SetUp]
                 public void FixtureSetup()

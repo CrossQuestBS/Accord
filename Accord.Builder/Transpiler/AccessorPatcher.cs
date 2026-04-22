@@ -1,10 +1,9 @@
-using System.Reflection;
 using Accord.Common.Attributes;
 using AsmResolver;
 using AsmResolver.DotNet;
 using AsmResolver.PE.DotNet.Cil;
 
-namespace Accord.Builder.Trampoline;
+namespace Accord.Builder.Transpiler;
 
 public static class AccessorPatcher
 { 
@@ -15,14 +14,7 @@ public static class AccessorPatcher
         
         return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == nameof(AccessorAttribute));
     }
-
-    public class PatchInfo(MethodDefinition patchMethodDefinition, TypeDefinition trampolineBuildType, TypeDefinition trampolineInstanceType)
-    {
-        public MethodDefinition PatchMethodDefinition = patchMethodDefinition;
-        public TypeDefinition TrampolineBuildType = trampolineBuildType;
-        public TypeDefinition TrampolineInstanceType = trampolineInstanceType;
-    }
-
+    
     public static void PatchFieldAccessor(RuntimeContext context, AssemblyDefinition assemblyDefinition, TypeDefinition typeDefinition)
     {
         foreach (var method in typeDefinition.Methods)

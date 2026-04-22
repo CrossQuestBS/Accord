@@ -1,15 +1,15 @@
 using System;
-using Accord.Common.Interfaces;
+using Accord.Common.Attributes;
 
 namespace Accord.TestCases
 {
-    public class ExampleTrampolineMod : IAccordTrampolinePatch<ExampleTrampolineMod>
+    [AccordTranspiler]
+    public partial class TranspilerExample
     {
-        public static ExampleTrampolineMod Instance => new ExampleTrampolineMod();
         public int ModifiedValue = 20;
     }
     
-    public class TrampolineExampleClass
+    public class TranspilerExampleClass
     {
         public void Example()
         {
