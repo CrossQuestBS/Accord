@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Accord.Generator;
 
 [Generator]
-public class SourceGeneratorWithAttributes : IIncrementalGenerator
+public class DetourSourceGenerator : IIncrementalGenerator
 {
 
     private static string FormatParameter(ITypeSymbol typeSymbol)
