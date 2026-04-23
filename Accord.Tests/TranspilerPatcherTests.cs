@@ -248,7 +248,7 @@ public class TranspilerPatcherTests
             var matched = TranspilerPatcher.GetMatchedInstructions(
                 _methodBody.Instructions.ToArray(),
                 new InvalidTranspiler().TranspilerList[0]
-            );g
+            );
             var trampolineInstanceMethod = _transpilerInstance.Methods.FirstOrDefault(it => it.Name == "get_Instance");
 
             var memberReference = trampolineInstanceMethod;
