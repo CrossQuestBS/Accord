@@ -4,7 +4,7 @@ using AsmResolver.PE.DotNet.Cil;
 
 namespace Accord.Transpiler.Helper;
 
-public static class CilInstructionExtensions
+public static class InstructionExtensions
 {
     private static CilMatch Matching(this CilInstruction instruction, CilMatch matchType, CilOpCode opCode,
         object? operand = null, bool forceOperandCheck = false)
