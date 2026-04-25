@@ -28,7 +28,6 @@ public class TranspilerBuild : IPostStagingBuild
         
         foreach (var assembly in buildAssemblies)
         { 
-            Console.WriteLine($"Loading assembly: {assembly}");
             context.LoadAssembly(assembly);
         }
 

@@ -13,7 +13,7 @@ namespace Accord.Builder.Transpiler;
 
 public static class TranspilerPatcher
 {
-    public static CilInstruction[]? GetMatchedInstructions(CilInstruction[] instructions,
+    public static (CilInstruction[]?, int) GetMatchedInstructions(CilInstruction[] instructions,
         IAccordTranspiler transpilerInstance)
     {
         using var matchStart = transpilerInstance.Match().GetEnumerator();
@@ -81,7 +81,7 @@ public static class TranspilerPatcher
             break;
         }
 
-        return foundMatch ? instructions.ToArray()[startIndex..(endIndex + 1)] : null;
+        return foundMatch ? (instructions[startIndex..(endIndex + 1)], endIndex+1) : (null, -1);
     }
 
     private static CustomAttribute? GetPatchAttribute(TypeDefinition typeDefinition)
@@ -89,7 +89,7 @@ public static class TranspilerPatcher
         if (!typeDefinition.HasCustomAttributes)
             return null;
         
-        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == nameof(AccordTranspilerBuildAttribute));
+        return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == nameof(AccordTranspilerAttribute));
     }
 
     public class PatchInfo(MethodDefinition patchMethodDefinition, TypeDefinition transpilerBuildType, TypeDefinition transpilerInstanceType)
@@ -157,10 +157,9 @@ public static class TranspilerPatcher
             }
         }
 
-
         foreach (var (assemblyDefinition, patches) in allPatches)
         {
-            
+            Console.WriteLine($"Running patches: {patches.Count}");
             foreach (var patch in patches)
             {
                 var fullPath = Path.GetFullPath(patch.TranspilerBuildType.DeclaringModule.FilePath);
@@ -175,7 +174,7 @@ public static class TranspilerPatcher
                 }
                 
                 
-                Console.WriteLine($"Running patch on: {patch.PatchMethodDefinition.FullName}");
+                Console.WriteLine($"Running patcher on: {patch.PatchMethodDefinition.FullName}");
                 var defaultImporter = patch.PatchMethodDefinition.DeclaringModule.DefaultImporter;
 
                 var getInstance =
@@ -220,12 +219,15 @@ public static class TranspilerPatcher
 
         List<TranspilerInfo> transpilerInfos = new List<TranspilerInfo>();
         
-        // TODO: Fix this
         int offset = 0;
+        var allInstructions = methodBody.Instructions.ToArray();
         foreach (var transpiler in instance.TranspilerList)
         {
-            var instructions = methodBody.Instructions.ToArray()[offset..];
-            var matchedInstructions = GetMatchedInstructions(instructions, transpiler);
+            var instructions = allInstructions[offset..];
+            
+            Console.WriteLine($"Instructions running: {instructions.Length}");
+            
+            var (matchedInstructions, endOffset) = GetMatchedInstructions(instructions, transpiler);
 
             if (matchedInstructions is null)
             {
@@ -233,6 +235,8 @@ public static class TranspilerPatcher
                 return null;
             }
 
+            if (endOffset != -1)
+                offset = endOffset;
 
             var modified = transpiler.Modify(matchedInstructions, modType, methodDefOrRef, importer);
 

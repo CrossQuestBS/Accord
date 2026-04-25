@@ -98,10 +98,10 @@ public class DetourGenerator
             var guid = Guid.NewGuid();
             var code = GetSyntaxTree(methodDefinition, guid);
             
-            Console.WriteLine(methodDefinition.Name);
+            /*Console.WriteLine(methodDefinition.Name);
             Console.WriteLine(code);
             Console.WriteLine();
-            Console.WriteLine();
+            Console.WriteLine();*/
 
             var patchInfo = new DetourPatchInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
             

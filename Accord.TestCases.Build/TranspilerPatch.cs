@@ -8,7 +8,7 @@ using AsmResolver.PE.DotNet.Cil;
 
 namespace Accord.TestCases.Build
 {
-    [AccordTranspilerBuild(typeof(TranspilerExampleClass), 
+    [AccordTranspiler(typeof(TranspilerExampleClass), 
         nameof(TranspilerExampleClass.Example), new Type[0], 
         typeof(TranspilerExample))]
     public class TranspilerPatch : IAccordTranspilerInstance

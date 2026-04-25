@@ -143,7 +143,7 @@ public class TranspilerPatcherTests
         [Test]
         public void Test()
         {
-            var matches = TranspilerPatcher.GetMatchedInstructions(
+            var (matches, _) = TranspilerPatcher.GetMatchedInstructions(
                 _methodBody.Instructions.ToArray(),
                 new TestTranspilerInstance().transpilers[0]
             );
@@ -245,7 +245,7 @@ public class TranspilerPatcherTests
         [Test]
         public void ShouldThrowExceptionIfInvalidStackTranspiler()
         {
-            var matched = TranspilerPatcher.GetMatchedInstructions(
+            var (matched, _) = TranspilerPatcher.GetMatchedInstructions(
                 _methodBody.Instructions.ToArray(),
                 new InvalidTranspiler().TranspilerList[0]
             );
@@ -272,7 +272,7 @@ public class TranspilerPatcherTests
         [Test]
         public void ShouldTranspile()
         {
-            var matched = TranspilerPatcher.GetMatchedInstructions(
+            var (matched, _) = TranspilerPatcher.GetMatchedInstructions(
                 _methodBody.Instructions.ToArray(),
                 new CorrectPatchInstance().TranspilerList[0]
             );

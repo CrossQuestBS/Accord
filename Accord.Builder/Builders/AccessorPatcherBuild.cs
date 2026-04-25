@@ -27,7 +27,6 @@ public class AccessorPatcherBuild : IPostStagingBuild
         
         foreach (var assembly in assemblies)
         { 
-            Console.WriteLine($"Loading assembly: {assembly}");
             context.LoadAssembly(assembly);
         }
 
