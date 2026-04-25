@@ -1,5 +1,6 @@
 using System.Reflection;
 using Accord.Builder.Transpiler;
+using Accord.Transpiler.Helper;
 using Accord.Transpiler.Interfaces;
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Code.Cil;
@@ -169,19 +170,11 @@ public class TranspilerPatcherTests
             {
                 public IEnumerable<Func<CilInstruction, CilMatch>> Match()
                 {
-                    yield return (instruction => instruction.OpCode == CilOpCodes.Newobj ? CilMatch.Start : CilMatch.None);
-                    yield return (instruction =>
-                    {
-                        if (instruction.OpCode != CilOpCodes.Callvirt ||
-                            instruction.Operand is not MemberReference memberReference ||
-                            memberReference.Name != "Next")
-                            return CilMatch.None;
-
-                        return CilMatch.Strict;
-                    });
-                    yield return (instruction => instruction.OpCode == CilOpCodes.Ldc_I4_S ? CilMatch.Strict : CilMatch.None);
-                    yield return (instruction => instruction.OpCode == CilOpCodes.Rem ? CilMatch.Strict : CilMatch.None);
-                    yield return (instruction => instruction.OpCode == CilOpCodes.Stloc_0 ? CilMatch.End : CilMatch.None);
+                    yield return ins => ins.MatchStart(CilOpCodes.Newobj);
+                    yield return ins => ins.Calls(CilMatch.Strict, "Next");
+                    yield return ins => ins.Match(CilOpCodes.Ldc_I4_S);
+                    yield return ins => ins.Match(CilOpCodes.Rem);
+                    yield return ins => ins.MatchEnd(CilOpCodes.Stloc_0);
                 }
 
                 public IEnumerable<CilInstruction> Modify(IEnumerable<CilInstruction> instructions, TypeDefinition definition, IMethodDefOrRef getInstance,
