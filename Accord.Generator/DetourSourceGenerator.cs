@@ -34,10 +34,14 @@ public class DetourSourceGenerator : IIncrementalGenerator
             var output = (specialType ? "" : "global::") + parameterType.ToDisplayString().Replace("<global namespace>", "").Split('<')[0];
             output += "<";
 
+            List<string> parameters = new List<string>();
+
             foreach (var argument in parameterType.TypeArguments)
             {
-                output += FormatParameter(argument);
+                parameters.Add(FormatParameter(argument));
             }
+
+            output += string.Join(",", parameters);
 
             output += ">";
 
@@ -127,12 +131,14 @@ public class DetourSourceGenerator : IIncrementalGenerator
         var returnTypeParameter = ("ref ");
         var returnTypeNamespace = methodSymbol.ReturnType.ContainingNamespace.ToDisplayString().Replace("<global namespace>", "global::");
 
-        if (returnTypeNamespace.Length > 0 && returnTypeNamespace != "global::")
+
+        returnTypeParameter += FormatParameter(methodSymbol.ReturnType) + " returnValue";
+        /*if (returnTypeNamespace.Length > 0 && returnTypeNamespace != "global::")
         {
             returnTypeParameter += (returnTypeNamespace + ".");
         }
 
-        returnTypeParameter += ($"{methodSymbol.ReturnType.Name} returnValue");
+        returnTypeParameter += ($"{methodSymbol.ReturnType.Name} returnValue");*/
 
         listParameters.Add(returnTypeParameter);
         

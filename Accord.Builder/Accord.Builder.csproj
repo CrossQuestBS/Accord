@@ -28,5 +28,4 @@
     <ItemGroup>
       <Folder Include="Accessors\" />
     </ItemGroup>
-
 </Project>

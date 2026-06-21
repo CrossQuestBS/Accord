@@ -50,7 +50,7 @@ public class RuntimeManager
             if (patcher.MethodType != attribute.DeclaringType)
                 continue;
             
-            if (!patcher.Arguments.SequenceEqual(attribute.Arguments))
+            if (attribute.Arguments != null && !patcher.Arguments.SequenceEqual(attribute.Arguments))
                 continue;
             
             patcher.Patch(patch);
@@ -69,7 +69,7 @@ public class RuntimeManager
             if (patcher.MethodType != attribute.DeclaringType)
                 continue;
             
-            if (!patcher.Arguments.SequenceEqual(attribute.Arguments))
+            if (attribute.Arguments != null && !patcher.Arguments.SequenceEqual(attribute.Arguments))
                 continue;
             
             patcher.Unpatch(patch);

@@ -5,6 +5,14 @@ using System.Threading.Tasks;
 
 namespace Accord.TestCases
 {
+    public class ExampleClassGeneric<TBase> where TBase : ExampleClass
+    {
+        public void Example(TBase what)
+        {
+            Console.WriteLine(what.GetType());
+        }
+    }
+    
     public class ExampleClass
     {
         public struct ExampleStruct

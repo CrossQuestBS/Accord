@@ -38,9 +38,7 @@ public static class AccessorPatcher
             
             if (field is null)
                 continue;
-
-            var b = "";
-
+            
             var instructions = method.CilMethodBody.Instructions;
             
             instructions.Clear();

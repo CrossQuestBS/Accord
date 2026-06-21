@@ -27,7 +27,7 @@ public class DetourGenerator
             output.AddRange(patches);
         }
         
-        return output.GroupBy(it => $"{it.AssemblyName}_{it.MethodFullName}").Select(x => x.First()).ToArray();;
+        return output.GroupBy(it => $"{it.AssemblyName}_{it.MethodFullName}_{it.TypeFullName}").Select(x => x.First()).ToArray();;
     }
 
     public static MethodDefinition? GetMethodFromNameAndArguments(List<MethodDefinition> methods, Utf8String name, List<Object> arguments)
@@ -69,7 +69,7 @@ public class DetourGenerator
         {
             var arguments = patchAttribute!.Signature!.FixedArguments;
 
-            var classType = (TypeDefOrRefSignature)arguments[0].Element!;
+            var classType = (TypeSignature)arguments[0].Element!;
             var methodName = (Utf8String)arguments[1].Element;
 
             List<Object>? typeMethodArguments = null;
@@ -82,7 +82,7 @@ public class DetourGenerator
 
             if (!classType.TryResolve(context, out TypeDefinition definition))
                 continue;
-
+            
             MethodDefinition methodDefinition;
             if (typeMethodArguments != null)
             {
@@ -96,14 +96,21 @@ public class DetourGenerator
                 throw new Exception($"Failed to find method: {methodName} with {arguments.Count} & {typeMethodArguments}");
 
             var guid = Guid.NewGuid();
-            var code = GetSyntaxTree(methodDefinition, guid);
+            var code = GetSyntaxTree(methodDefinition, guid, classType);
             
             /*Console.WriteLine(methodDefinition.Name);
             Console.WriteLine(code);
             Console.WriteLine();
             Console.WriteLine();*/
+            
+            if (classType.FullName.Contains("ExampleClassGeneric"))
+                Console.WriteLine("W");
 
-            var patchInfo = new DetourPatchInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, classType.FullName, code, guid);
+            var fullName = classType is GenericInstanceTypeSignature genericInstanceTypeSignature
+                ? genericInstanceTypeSignature.GenericType.FullName
+                : classType.FullName;
+
+            var patchInfo = new DetourPatchInfo(methodDefinition.DeclaringModule.Assembly.Name.ToString(), methodDefinition.FullName, fullName, code, guid);
             
             output.Add(patchInfo);
         }
@@ -120,16 +127,28 @@ public class DetourGenerator
         return typeDefinition.CustomAttributes.FirstOrDefault(it => it.Type?.Name == "AccordPatchAttribute");
     }
 
-    private static string FormatParameter(TypeSignature parameterType)
+    private static string FormatParameter(TypeSignature parameterType, TypeSignature actualClassSignature)
     {
+        if (parameterType.Name == "!0")
+        {
+            if (actualClassSignature is GenericInstanceTypeSignature genericInstanceTypeSignature)
+            {
+                return "global::" + genericInstanceTypeSignature.TypeArguments[0].FullName.Replace("&", "").Replace("+", ".").Replace("modreq(System.Runtime.InteropServices.InAttribute)", "").Trim();
+            }
+        }
+        
         if (parameterType is GenericInstanceTypeSignature genericType)
         {
             var output = "global::" +(genericType.GenericType.FullName).Split("`")[0];
             output += "<";
+
+            List<string> genericParameters = new List<string>();
             foreach (var argument in genericType.TypeArguments)
             {
-                output += FormatParameter(argument);
+                genericParameters.Add(FormatParameter(argument, actualClassSignature));
             }
+
+            output += String.Join(", ", genericParameters.ToArray());
 
             output += ">";
             
@@ -141,9 +160,9 @@ public class DetourGenerator
         return "";
     }
     
-    private static SyntaxTree GetSyntaxTree(MethodDefinition methodDefinition, Guid guid)
+    private static SyntaxTree GetSyntaxTree(MethodDefinition methodDefinition, Guid guid, TypeSignature classType)
     { 
-        var fullClassName = methodDefinition.DeclaringType.FullName.Replace("+", ".");
+        var fullClassName = methodDefinition.DeclaringType.FullName.Replace("+", ".").Replace("`", "Type");
         var methodName = methodDefinition.Name.ToString();
         var generatedClassName = $"{methodName}Patcher_{guid.ToClassSafeString()}".Replace(".ctor", "Constructor");
 
@@ -152,29 +171,30 @@ public class DetourGenerator
 
         List<string> totalParameters = new();
         List<string> simpleParameters = new();
-
+        
         var parameterSimpleValue = "";
 
         if (!methodDefinition.IsStatic)
         {
-            totalParameters.Add($"global::{fullClassName} instance");
+            totalParameters.Add($"{FormatParameter(classType, classType)} instance");
             simpleParameters.Add("instance");
         }
-        
+
+   
         if (methodDefinition.Parameters.Count > 0)
         {
             simpleParameters.AddRange(methodDefinition.Parameters.Select((it, idx) => $"ref arg{idx + 1}").ToArray());
-            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"ref {FormatParameter(it.ParameterType)} arg{idx+1}").ToArray());
+            totalParameters.AddRange( methodDefinition.Parameters.Select((it, idx) => $"ref {FormatParameter(it.ParameterType, classType)} arg{idx+1}").ToArray());
         }
 
         if (methodDefinition.Signature.ReturnType.Name != "Void")
         {
-            totalParameters.Add($"ref {FormatParameter(methodDefinition.Signature.ReturnType)} returnValue");
+            totalParameters.Add($"ref {FormatParameter(methodDefinition.Signature.ReturnType, classType)} returnValue");
             simpleParameters.Add("ref returnValue");
         }
 
         var arguments =
-            String.Join(",", methodDefinition.Parameters.Select(it => $"typeof({FormatParameter(it.ParameterType)})"));
+            String.Join(",", methodDefinition.Parameters.Select(it => $"typeof({FormatParameter(it.ParameterType, classType)})"));
 
         parameters = string.Join(", ", totalParameters);
         parameterSimpleValue = string.Join(", ", simpleParameters);
@@ -190,9 +210,10 @@ using Accord.Common;
 
 namespace Accord.Generated.{fullClassName}.{methodName.Replace(".", "Dot")};
 
+
 public class {generatedClassName} : IAccordPatcher
 {{
-    public global::System.Type MethodType => typeof(global::{fullClassName});
+    public global::System.Type MethodType => typeof({FormatParameter(classType, classType)});
     public string MethodName => ""{methodDefinition.Name.Value}"";
     public global::System.Type[] Arguments => new global::System.Type[] {{{arguments}}};
 
@@ -202,6 +223,9 @@ public class {generatedClassName} : IAccordPatcher
 
     private static readonly Dictionary<IAccordPatch, PostfixDelegate> PostfixDict = new();
     private static readonly Dictionary<IAccordPatch, PrefixDelegate> PrefixDict = new();
+    private static readonly List<IAccordPatch> RemoveAfterRunPrefix = new(5);
+    private static readonly List<IAccordPatch> RemoveAfterRunPostfix = new(5);
+
 
     public static {generatedClassName} Instance {{ get; }} = new();
 
@@ -234,6 +258,20 @@ public class {generatedClassName} : IAccordPatcher
 
     bool Prefix({parameters})
     {{
+        if (RemoveAfterRunPrefix.Count > 0)
+        {{
+            foreach (var key in RemoveAfterRunPrefix)
+            {{
+                PrefixDict.Remove(key);
+
+                if (PostfixDict.ContainsKey(key))
+                {{
+                    PostfixDict.Remove(key);
+                }}
+            }}
+            RemoveAfterRunPrefix.Clear();
+        }}
+
         foreach (var keyValue in PrefixDict)
         {{
             try
@@ -243,7 +281,8 @@ public class {generatedClassName} : IAccordPatcher
             }}
             catch (Exception e)
             {{
-                Unpatch(keyValue.Key);
+                RemoveAfterRunPrefix.Add(keyValue.Key);
+                throw e;
             }}
         }}
 
@@ -252,6 +291,20 @@ public class {generatedClassName} : IAccordPatcher
 
     void Postfix({parameters})
     {{
+        if (RemoveAfterRunPostfix.Count > 0)
+        {{
+            foreach (var key in RemoveAfterRunPostfix)
+            {{
+                PostfixDict.Remove(key);
+
+                if (PrefixDict.ContainsKey(key))
+                {{
+                    PrefixDict.Remove(key);
+                }}
+            }}
+            RemoveAfterRunPostfix.Clear();
+        }}
+
         foreach (var keyValue in PostfixDict)
         {{
             try
@@ -260,7 +313,8 @@ public class {generatedClassName} : IAccordPatcher
             }}
             catch (Exception e)
             {{
-                Unpatch(keyValue.Key);
+                RemoveAfterRunPostfix.Add(keyValue.Key);
+                throw e;
             }}
         }}
     }}
@@ -302,6 +356,8 @@ public class {generatedClassName} : IAccordPatcher
         foreach (var patcher in patchers)
         {
             Console.WriteLine($"Trying to compile for {patcher.MethodFullName} {patcher.TypeFullName} {patcher.Guid} {patcher.AssemblyName}");
+            Console.WriteLine();
+            Console.WriteLine(patcher.GeneratedCode.ToString());
             CSharpCompilation compilation2 = CSharpCompilation.Create(
                 "Accord.Generated",
                 syntaxTrees: [patcher.GeneratedCode],
